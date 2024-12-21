@@ -1,193 +1,237 @@
 let conversationsByTabTitle = {};
 
-document.getElementById('viewBtn').addEventListener('click', async () => {
-  try {
-    const storage = await browser.storage.local.get('conversationsByTabTitle');
-    conversationsByTabTitle = storage.conversationsByTabTitle || {};
+function createBasicElement(type, text, color) {
+    const element = document.createElement(type);
+    if (text) element.textContent = text;
+    if (color) element.style.color = color;
+    return element;
+}
+
+function createStyledDiv(className, tabTitle) {
+    const div = document.createElement('div');
+    if (className) div.className = className;
+    if (tabTitle) div.setAttribute('data-tab-title', tabTitle);
+    div.style.cursor = 'pointer';
+    div.style.padding = '5px';
+    div.style.margin = '5px 0';
+    div.style.border = '1px solid #ccc';
+    return div;
+}
+
+function createNoConversationsMessage(statusEl) {
+    const container = createStyledDiv(null, null);
+    container.style.color = 'blue';
+
+    const header = createBasicElement('strong', 'No conversation captured yet');
+    container.appendChild(header);
+    container.appendChild(createBasicElement('br'));
+    container.appendChild(createBasicElement('br'));
+
+    const text = createBasicElement('div', 'To capture a conversation:');
+    container.appendChild(text);
+
+    const ul = document.createElement('ul');
+    [
+        'Navigate to a page with a URL containing "chat_conversations/"',
+        'Ensure the page loads completely',
+        'The extension will automatically try to capture the JSON'
+    ].forEach(text => {
+        const li = createBasicElement('li', text);
+        ul.appendChild(li);
+    });
+    container.appendChild(ul);
     
-    const statusEl = document.getElementById('status');
+    statusEl.appendChild(container);
+}
+
+function createConversationItem(tabTitle, conversation) {
+    const container = createStyledDiv('conversation-item', tabTitle);
     
-    // Filter out 'Claude' tab, if exists
-    const filteredConversations = Object.fromEntries(
-      Object.entries(conversationsByTabTitle).filter(([tabTitle]) => tabTitle !== 'Claude')
-    );
+    const titleLine = createBasicElement('strong', `Tab: ${tabTitle}`);
+    container.appendChild(titleLine);
+    container.appendChild(createBasicElement('br'));
     
-    if (Object.keys(filteredConversations).length > 0) {
-      // If multiple conversations, show a list
-      let html = '<strong>Captured Conversations:</strong><br>';
-      Object.entries(filteredConversations).forEach(([tabTitle, conversation]) => {
-        html += `
-          <div class="conversation-item" data-tab-title="${escapeHtml(tabTitle)}" style="cursor: pointer; padding: 5px; margin: 5px 0; border: 1px solid #ccc;">
-            <strong>Tab: ${escapeHtml(tabTitle)}</strong><br>
-            URL: ${conversation.url}<br>
-            Timestamp: ${conversation.timestamp}<br>
-          </div>
-        `;
-      });
-      statusEl.innerHTML = html;
-    } else {
-      statusEl.innerHTML = `
-        <div style="color: blue;">
-          <strong>No conversation captured yet</strong><br>
-          <br>
-          To capture a conversation:
-          <ul>
-            <li>Navigate to a page with a URL containing "chat_conversations/"</li>
-            <li>Ensure the page loads completely</li>
-            <li>The extension will automatically try to capture the JSON</li>
-          </ul>
-        </div>
-      `;
+    const urlLine = createBasicElement('span', `URL: ${conversation.url}`);
+    container.appendChild(urlLine);
+    container.appendChild(createBasicElement('br'));
+    
+    const timestampLine = createBasicElement('span', `Timestamp: ${conversation.timestamp}`);
+    container.appendChild(timestampLine);
+    
+    return container;
+}
+
+function createDownloadOption(tabTitle, conversation) {
+    const container = createStyledDiv('download-option', tabTitle);
+    
+    const titleLine = createBasicElement('strong', `Tab: ${tabTitle}`);
+    container.appendChild(titleLine);
+    container.appendChild(createBasicElement('br'));
+    
+    const urlLine = createBasicElement('span', `URL: ${conversation.url}`);
+    container.appendChild(urlLine);
+    container.appendChild(createBasicElement('br'));
+    
+    const timestampLine = createBasicElement('span', `Timestamp: ${conversation.timestamp}`);
+    container.appendChild(timestampLine);
+    container.appendChild(createBasicElement('br'));
+    
+    const button = createBasicElement('button', 'Download This Conversation');
+    button.className = 'select-download';
+    button.setAttribute('data-tab-title', tabTitle);
+    container.appendChild(button);
+    
+    return container;
+}
+
+function clearElement(element) {
+    while (element.firstChild) {
+        element.removeChild(element.firstChild);
     }
-  } catch (error) {
-    console.error('Error viewing conversation:', error);
-    document.getElementById('status').textContent = `Error: ${error.message}`;
-  }
+}
+
+document.getElementById('viewBtn').addEventListener('click', async () => {
+    try {
+        const storage = await browser.storage.local.get('conversationsByTabTitle');
+        conversationsByTabTitle = storage.conversationsByTabTitle || {};
+        
+        const statusEl = document.getElementById('status');
+        clearElement(statusEl);
+        
+        const filteredConversations = Object.fromEntries(
+            Object.entries(conversationsByTabTitle)
+                .filter(([tabTitle]) => tabTitle !== 'Claude')
+        );
+        
+        if (Object.keys(filteredConversations).length > 0) {
+            const header = createBasicElement('strong', 'Captured Conversations:');
+            statusEl.appendChild(header);
+            statusEl.appendChild(createBasicElement('br'));
+            
+            Object.entries(filteredConversations).forEach(([tabTitle, conversation]) => {
+                statusEl.appendChild(createConversationItem(tabTitle, conversation));
+            });
+        } else {
+            createNoConversationsMessage(statusEl);
+        }
+    } catch (error) {
+        console.error('Error viewing conversation:', error);
+        const statusEl = document.getElementById('status');
+        statusEl.textContent = `Error: ${error.message}`;
+    }
 });
 
 document.getElementById('downloadBtn').addEventListener('click', async () => {
-  try {
-    // Retrieve conversations again to ensure we have the latest
-    const storage = await browser.storage.local.get('conversationsByTabTitle');
-    conversationsByTabTitle = storage.conversationsByTabTitle || {};
-    
-    // If no conversations, show message
-    if (Object.keys(conversationsByTabTitle).length === 0) {
-      document.getElementById('status').innerHTML = `
-        <div style="color: blue;">
-          <strong>No conversation to download</strong><br>
-          <br>
-          To capture a conversation:
-          <ul>
-            <li>Navigate to a page with a URL containing "chat_conversations/"</li>
-            <li>Ensure the page loads completely</li>
-            <li>The extension will automatically try to capture the JSON</li>
-          </ul>
-        </div>
-      `;
-      return;
+    try {
+        const storage = await browser.storage.local.get('conversationsByTabTitle');
+        conversationsByTabTitle = storage.conversationsByTabTitle || {};
+        
+        const statusEl = document.getElementById('status');
+        clearElement(statusEl);
+        
+        if (Object.keys(conversationsByTabTitle).length === 0) {
+            createNoConversationsMessage(statusEl);
+            return;
+        }
+
+        const filteredConversations = Object.fromEntries(
+            Object.entries(conversationsByTabTitle)
+                .filter(([tabTitle]) => tabTitle !== 'Claude')
+        );
+
+        if (Object.keys(filteredConversations).length === 0) {
+            const container = createStyledDiv(null, null);
+            container.style.color = 'blue';
+            container.appendChild(createBasicElement('strong', 'No downloadable conversations'));
+            container.appendChild(createBasicElement('br'));
+            container.appendChild(createBasicElement('span', 'All captured conversations are from the "Claude" tab.'));
+            statusEl.appendChild(container);
+            return;
+        }
+
+        if (Object.keys(filteredConversations).length > 1) {
+            const header = createBasicElement('strong', 'Select a Conversation to Download:');
+            statusEl.appendChild(header);
+            statusEl.appendChild(createBasicElement('br'));
+            
+            Object.entries(filteredConversations).forEach(([tabTitle, conversation]) => {
+                statusEl.appendChild(createDownloadOption(tabTitle, conversation));
+            });
+            
+            document.querySelectorAll('.select-download').forEach(button => {
+                button.addEventListener('click', function() {
+                    const tabTitle = this.getAttribute('data-tab-title');
+                    downloadConversation(tabTitle);
+                });
+            });
+            return;
+        }
+
+        if (Object.keys(filteredConversations).length === 1) {
+            const firstTabTitle = Object.keys(filteredConversations)[0];
+            downloadConversation(firstTabTitle);
+        }
+    } catch (error) {
+        console.error('Error preparing download:', error);
+        const statusEl = document.getElementById('status');
+        statusEl.textContent = `Error: ${error.message}`;
     }
-
-    // Filter out 'Claude' tab, if exists
-    const filteredConversations = Object.fromEntries(
-      Object.entries(conversationsByTabTitle).filter(([tabTitle]) => tabTitle !== 'Claude')
-    );
-
-    // If no conversations left after filtering, show message
-    if (Object.keys(filteredConversations).length === 0) {
-      document.getElementById('status').innerHTML = `
-        <div style="color: blue;">
-          <strong>No downloadable conversations</strong><br>
-          All captured conversations are from the "Claude" tab.
-        </div>
-      `;
-      return;
-    }
-
-    // If multiple conversations, create a selection dialog
-    if (Object.keys(filteredConversations).length > 1) {
-      const statusEl = document.getElementById('status');
-      let html = '<strong>Select a Conversation to Download:</strong><br>';
-      
-      Object.entries(filteredConversations).forEach(([tabTitle, conversation]) => {
-        html += `
-          <div class="download-option" data-tab-title="${escapeHtml(tabTitle)}" style="cursor: pointer; padding: 5px; margin: 5px 0; border: 1px solid #ccc;">
-            <strong>Tab: ${escapeHtml(tabTitle)}</strong><br>
-            URL: ${conversation.url}<br>
-            Timestamp: ${conversation.timestamp}<br>
-            <button class="select-download" data-tab-title="${escapeHtml(tabTitle)}">Download This Conversation</button>
-          </div>
-        `;
-      });
-      
-      statusEl.innerHTML = html;
-
-      // Add click events to download buttons
-      document.querySelectorAll('.select-download').forEach(button => {
-        button.addEventListener('click', function() {
-          const tabTitle = this.getAttribute('data-tab-title');
-          downloadConversation(tabTitle);
-        });
-      });
-      
-      return;
-    }
-
-    // If only one conversation left after filtering, download it
-    if (Object.keys(filteredConversations).length === 1) {
-      const firstTabTitle = Object.keys(filteredConversations)[0];
-      downloadConversation(firstTabTitle);
-    }
-  } catch (error) {
-    console.error('Error preparing download:', error);
-    document.getElementById('status').textContent = `Error: ${error.message}`;
-  }
 });
 
 document.getElementById('clearBtn').addEventListener('click', async () => {
-  try {
-    // Clear conversations from local storage
-    await browser.storage.local.remove('conversationsByTabTitle');
-    
-    // Clear the local variable
-    conversationsByTabTitle = {};
-    
-    // Update status
-    document.getElementById('status').innerHTML = `
-      <div style="color: green;">
-        <strong>Conversations Cleared</strong><br>
-        All captured conversations have been removed.
-      </div>
-    `;
-  } catch (error) {
-    console.error('Error clearing conversations:', error);
-    document.getElementById('status').textContent = `Error: ${error.message}`;
-  }
+    try {
+        await browser.storage.local.remove('conversationsByTabTitle');
+        conversationsByTabTitle = {};
+        
+        const statusEl = document.getElementById('status');
+        clearElement(statusEl);
+        
+        const container = createStyledDiv(null, null);
+        container.style.color = 'green';
+        container.appendChild(createBasicElement('strong', 'Conversations Cleared'));
+        container.appendChild(createBasicElement('br'));
+        container.appendChild(createBasicElement('span', 'All captured conversations have been removed.'));
+        statusEl.appendChild(container);
+    } catch (error) {
+        console.error('Error clearing conversations:', error);
+        const statusEl = document.getElementById('status');
+        statusEl.textContent = `Error: ${error.message}`;
+    }
 });
 
-// Utility function to download a specific conversation
 function downloadConversation(tabTitle) {
-  if (tabTitle === 'Claude') {
-    document.getElementById('status').innerHTML = `
-      <div style="color: blue;">
-        <strong>Download Prevented</strong><br>
-        Conversations from the "Claude" tab cannot be downloaded.
-      </div>
-    `;
-    return;
-  }
-  
-  const conversation = conversationsByTabTitle[tabTitle];
-  
-  if (conversation) {
-    const jsonString = JSON.stringify(conversation.data);
-    const md = markdown(jsonString);
-
-    const blob = new Blob([md], {type: 'text/markdown'});
-    const url = URL.createObjectURL(blob);
+    if (tabTitle === 'Claude') {
+        const statusEl = document.getElementById('status');
+        clearElement(statusEl);
+        
+        const container = createStyledDiv(null, null);
+        container.style.color = 'blue';
+        container.appendChild(createBasicElement('strong', 'Download Prevented'));
+        container.appendChild(createBasicElement('br'));
+        container.appendChild(createBasicElement('span', 'Conversations from the "Claude" tab cannot be downloaded.'));
+        statusEl.appendChild(container);
+        return;
+    }
     
-    // Create a temporary anchor element to trigger download
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `chat_conversations_${conversation.timestamp.replace(/:/g, '-')}_${encodeURIComponent(tabTitle)}.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    const conversation = conversationsByTabTitle[tabTitle];
     
-    // Revoke the object URL
-    URL.revokeObjectURL(url);
+    if (conversation) {
+        const jsonString = JSON.stringify(conversation.data);
+        const md = markdown(jsonString);
 
-    // Reset status
-    document.getElementById('status').innerHTML = '';
-  }
-}
-
-// Utility function to escape HTML to prevent XSS
-function escapeHtml(unsafe) {
-  return unsafe
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+        const blob = new Blob([md], {type: 'text/markdown'});
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `chat_conversations_${conversation.timestamp.replace(/:/g, '-')}_${encodeURIComponent(tabTitle)}.md`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        
+        URL.revokeObjectURL(url);
+        
+        const statusEl = document.getElementById('status');
+        clearElement(statusEl);
+    }
 }
