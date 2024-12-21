@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Chat Conversation Capture</title>
+  <style>
+    body { 
+      width: 300px; 
+      padding: 10px; 
+      font-family: Arial, sans-serif; 
+    }
+    #status {
+      margin-top: 10px;
+      font-size: 14px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    button {
+      margin: 5px 0;
+      padding: 5px 10px;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <h3>Chat Conversation Capture</h3>
+  <button id="viewBtn">View Captured Conversations</button>
+  <button id="downloadBtn">Download Selected Conversation</button>
+  <button id="clearBtn">Clear Conversations</button>
+  <div id="status"></div>
+
+  <script src="markdown-converter.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
