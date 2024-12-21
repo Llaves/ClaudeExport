@@ -3,3 +3,4 @@
 *.zip
 *.pem
 *.cdr
+packed/*
