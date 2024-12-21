@@ -9,6 +9,7 @@ To install in Firefox, download the claudeExport.xpi file to your computer. In t
 click the settings gear and then click "Install add-on from file". Browse to wherever you downloaded the .xpi file and select it.
 
 To install in chrome, open the debugger interface by typing "chrome://extensions". In the upper right corner enable "Developer Mode". Then click "Load unpacked". Navigate to the Chrome folder and click on manifest.json.
+You may be tempted to "pack" the extension into a .crx file so that you don't have to use developer mode. This won't work. Chrome will only install .crx files from the Chrome store.
 
 ## Use
 Because the extenson captures the JSON as it's downloaded, if the extension is not active when the page was initially downloaded you will get a message "no conversation captured" when you try to view or download the captured conversations.
