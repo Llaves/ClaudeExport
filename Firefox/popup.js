@@ -217,14 +217,14 @@ function downloadConversation(tabTitle) {
     
     if (conversation) {
         const jsonString = JSON.stringify(conversation.data);
-        const md = markdown(jsonString);
+		  const html = generateHtml(jsonString);
 
-        const blob = new Blob([md], {type: 'text/markdown'});
+        const blob = new Blob([html], {type: 'text/html'});
         const url = URL.createObjectURL(blob);
         
         const a = document.createElement('a');
         a.href = url;
-        a.download = `chat_conversations_${conversation.timestamp.replace(/:/g, '-')}_${encodeURIComponent(tabTitle)}.md`;
+        a.download = `chat_conversations_${conversation.timestamp.replace(/:/g, '-')}_${encodeURIComponent(tabTitle)}.html`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

@@ -6,12 +6,12 @@ document.getElementById('viewBtn').addEventListener('click', async () => {
     conversationsByTabTitle = storage.conversationsByTabTitle || {};
     
     const statusEl = document.getElementById('status');
-	 
-        // Filter out 'Claude' tab, if exists
+   
+    // Filter out 'Claude' tab, if exists
     const filteredConversations = Object.fromEntries(
       Object.entries(conversationsByTabTitle).filter(([tabTitle]) => tabTitle !== 'Claude')
     );
-	 
+   
     if (Object.keys(filteredConversations).length > 0) {
       // If multiple conversations, show a list
       let html = '<strong>Captured Conversations:</strong><br>';
@@ -124,17 +124,11 @@ document.getElementById('downloadBtn').addEventListener('click', async () => {
   }
 });
 
-// New Clear Conversations button
 document.getElementById('clearBtn').addEventListener('click', async () => {
   try {
-    // Clear conversations from local storage
     await chrome.storage.local.remove('conversationsByTabTitle');
-    
-    // Clear the local variable
     conversationsByTabTitle = {};
-	 filteredConversatons = {}
     
-    // Update status
     document.getElementById('status').innerHTML = `
       <div style="color: green;">
         <strong>Conversations Cleared</strong><br>
@@ -147,9 +141,7 @@ document.getElementById('clearBtn').addEventListener('click', async () => {
   }
 });
 
-// Utility function to download a specific conversation
 function downloadConversation(tabTitle) {
-  // Prevent downloading conversations from exactly "Claude" tab
   if (tabTitle === 'Claude') {
     document.getElementById('status').innerHTML = `
       <div style="color: blue;">
@@ -163,25 +155,20 @@ function downloadConversation(tabTitle) {
   const conversation = conversationsByTabTitle[tabTitle];
   
   if (conversation) {
-    // Direct markdown conversion using shared script
     const jsonString = JSON.stringify(conversation.data);
-    const md = markdown(jsonString);
+    const html = generateHtml(jsonString);
 
-    const blob = new Blob([md], {type: 'text/markdown'});
+    const blob = new Blob([html], {type: 'text/html'});
     const url = URL.createObjectURL(blob);
     
-    // Create a temporary anchor element to trigger download
     const a = document.createElement('a');
     a.href = url;
-    a.download = `chat_conversations_${conversation.timestamp.replace(/:/g, '-')}_${encodeURIComponent(tabTitle)}.md`;
+    a.download = `chat_conversations_${conversation.timestamp.replace(/:/g, '-')}_${encodeURIComponent(tabTitle)}.html`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     
-    // Revoke the object URL
     URL.revokeObjectURL(url);
-
-    // Reset status
     document.getElementById('status').innerHTML = '';
   }
 }

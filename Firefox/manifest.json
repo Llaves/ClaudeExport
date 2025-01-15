@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
-  "name": "Chat Conversation Capture",
-  "version": "1.0.1",
+  "name": "Claude Conversation Capture",
+  "version": "1.0.5",
   "description": "Captures JSON content from URLs containing chat_conversation/",
   "permissions": [
     "webRequest",
@@ -16,7 +16,7 @@
 	  "96": "icons/icon96.png"
 	},
   "background": {
-    "scripts": ["markdown-converter.js", "background.js"]
+    "scripts": ["html-converter.js", "background.js"]
   },
   "browser_action": {
     "default_popup": "popup.html"

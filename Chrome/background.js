@@ -1,5 +1,5 @@
-// Import shared markdown conversion script
-importScripts('markdown-converter.js');
+// Import shared HTML conversion script
+importScripts('html-converter.js');
 
 // Track conversations by tab title
 const conversationsByTabTitle = {};

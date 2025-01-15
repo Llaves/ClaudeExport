@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Chat Conversation Capture",
-  "version": "1.0.1",
+  "version": "1.0.5",
   "description": "Captures JSON content from URLs containing chat_conversation/",
   "permissions": [
     "webRequest",
     "storage",
+    "activeTab",
     "downloads"
   ],
   "host_permissions": [
@@ -25,7 +26,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["markdown-converter.js"],
+      "resources": ["html-converter.js"],
       "matches": ["<all_urls>"]
     }
   ]
