@@ -15,3 +15,5 @@ You may be tempted to "pack" the extension into a .crx file so that you don't ha
 ## Use
 Because the extenson captures the JSON as it's downloaded, if the extension is not active when the page was initially downloaded you will get a message "no conversation captured" when you try to view or download the captured conversations.
 If this occurs, just reload the page and try again. 
+
+By default, printing does not include non-inlined artifacts - ie, artifacts that appear in the slide-out panel. There is a checkbox labeled Print All Artifacts in the pop-up menu. If you check this box *before* exporting the HTML, a  all the artiprinted version will have all artifacts printed where they occur in the conversation. The browser view of the file is the same whether or not the box is ticked. 
