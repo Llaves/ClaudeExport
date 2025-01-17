@@ -216,8 +216,9 @@ function downloadConversation(tabTitle) {
     const conversation = conversationsByTabTitle[tabTitle];
     
     if (conversation) {
-        const jsonString = JSON.stringify(conversation.data);
-		  const html = generateHtml(jsonString);
+        const jsonString = JSON.stringify(conversation.data);    
+        const printArtifacts = document.getElementById('printArtifacts').checked;
+        const html = generateHtml(jsonString, printArtifacts);
 
         const blob = new Blob([html], {type: 'text/html'});
         const url = URL.createObjectURL(blob);
@@ -235,3 +236,14 @@ function downloadConversation(tabTitle) {
         clearElement(statusEl);
     }
 }
+// When the popup loads, restore the checkbox state
+document.addEventListener('DOMContentLoaded', async () => {
+  const checkbox = document.getElementById('printArtifacts');
+  const storage = await browser.storage.local.get('printArtifactsEnabled');
+  checkbox.checked = storage.printArtifactsEnabled || false;
+});
+
+// When the checkbox changes, save its state
+document.getElementById('printArtifacts').addEventListener('change', async (e) => {
+  await browser.storage.local.set({ printArtifactsEnabled: e.target.checked });
+});

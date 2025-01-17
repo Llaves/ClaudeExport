@@ -45,12 +45,11 @@ function replaceInlineCode(text) {
   text = text.replace(/(<li[^>]*>.*?<\/li>\n?)+/gs, (match) => {
     return `<ol class="numbered-list">${match}</ol>`;
   });
-
   return text;
 }
 
 let artifactCounter = 0;
-function replaceArtifactTags(input, artifactPanels) {
+function replaceArtifactTags(input, artifactPanels, printArtifacts = false) {
   const regex = /<antArtifact[^>]*>([\s\S]*?)<\/antArtifact>/g;
   let matches = [...input.matchAll(regex)];
 
@@ -82,9 +81,8 @@ function replaceArtifactTags(input, artifactPanels) {
 
   // Process all matches at once to maintain correct ordering
   let result = input;
- 
 
-   matches.forEach((match) => {
+  matches.forEach((match) => {
     const fullMatch = match[0];
     const content = match[1];
     const openingTag = match[0].substring(0, match[0].indexOf('>') + 1);
@@ -95,21 +93,30 @@ function replaceArtifactTags(input, artifactPanels) {
     
     createArtifactPanel(artifactId, title, content, lang);
     
-    result = result.replace(fullMatch, `<p class="artifact-button-wrapper"><button class="artifact-button" data-artifact-id="${artifactId}">
-      <svg class="artifact-icon" width="16" height="16" viewBox="0 0 16 16">
-        <path fill="currentColor" d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5h-2z"/>
-      </svg>
-      <span class="artifact-title">${title}</span>
-    </button></p>`);
+    // Create both button and inline content, control visibility with CSS
+    result = result.replace(fullMatch, `
+      <div class="artifact-wrapper">
+        <p class="artifact-button-wrapper ${printArtifacts ? 'print-enabled' : ''}">
+          <button class="artifact-button" data-artifact-id="${artifactId}">
+            <svg class="artifact-icon" width="16" height="16" viewBox="0 0 16 16">
+              <path fill="currentColor" d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5h-2z"/>
+            </svg>
+            <span class="artifact-title">${title}</span>
+          </button>
+        </p>
+        <div class="artifact-inline ${printArtifacts ? 'print-enabled' : ''}">
+          <h4>${title}</h4>
+          <pre class="code-block ${lang}">${escapeHtml(content)}</pre>
+        </div>
+      </div>
+    `);
     artifactCounter++;
-  
-
   });
 
   return result;
 }
 
-function generateHtml(input) {
+function generateHtml(input, printArtifacts = false) {
   const parsed = parser(input);
   if (!parsed.chat_messages) {
     return "";
@@ -133,15 +140,25 @@ function generateHtml(input) {
               </div>
             </div>
           `);
-          return `<p class="artifact-button-wrapper"><button class="artifact-button" data-artifact-id="${artifactId}">
-            <svg class="artifact-icon" width="16" height="16" viewBox="0 0 16 16">
-              <path fill="currentColor" d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5h-2z"/>
-            </svg>
-            <span class="artifact-title">Analysis</span>
-          </button></p>`;
+          return `
+            <div class="artifact-wrapper">
+              <p class="artifact-button-wrapper ${printArtifacts ? 'print-enabled' : ''}">
+                <button class="artifact-button" data-artifact-id="${artifactId}">
+                  <svg class="artifact-icon" width="16" height="16" viewBox="0 0 16 16">
+                    <path fill="currentColor" d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5h-2z"/>
+                  </svg>
+                  <span class="artifact-title">Analysis</span>
+                </button>
+              </p>
+              <div class="artifact-inline ${printArtifacts ? 'print-enabled' : ''}">
+                <h4>Analysis</h4>
+                <pre class="code-block javascript">${escapeHtml(content.input.code.trim())}</pre>
+              </div>
+            </div>
+          `;
         }
       } else if (content.text) {
-        let processedText = replaceArtifactTags(content.text, artifactPanels);
+        let processedText = replaceArtifactTags(content.text, artifactPanels, printArtifacts);
         processedText = replaceInlineCode(processedText);
         return processedText;
       }
@@ -324,6 +341,26 @@ function generateHtml(input) {
       }
       .assistant {
         background: white;
+        font-family: "Times New Roman", Times, serif;
+        font-size: 110%;
+      }
+      
+      /* New styles for inline artifacts */
+      .artifact-inline {
+        display: none;
+        margin: 1em 0;
+        padding: 1em;
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+      }
+      
+      .artifact-inline h4 {
+        margin: 0 0 1em 0;
+        color: #111827;
+      }
+      
+      .artifact-inline.print-enabled {
+        display: none;
       }
       
       @media print {
@@ -338,27 +375,13 @@ function generateHtml(input) {
           padding: 0;
         }
         .artifact-container {
-          width: 100% !important;
-          height: auto;
-          position: static;
-          border-left: none;
-          margin-top: 20px;
+          display: none;
         }
-        .artifact-panel {
-          /* Remove the !important flag so it doesn't override the display:flex */
+        .artifact-button-wrapper.print-enabled {
+          display: none;
+        }
+        .artifact-inline.print-enabled {
           display: block;
-          page-break-inside: avoid;
-        }
-        /* Only show active panels when printing */
-        .artifact-panel:not(.active) {
-          display: none;
-        }
-        .artifact-button-wrapper,
-        .close-panel {
-          display: none;
-        }
-        .message {
-          page-break-inside: avoid;
         }
       }
     </style>
@@ -378,7 +401,7 @@ function generateHtml(input) {
       function hideAllPanels() {
         artifactPanels.forEach(panel => {
           panel.classList.remove('active');
-        });
+      }); 
         artifactContainer.classList.remove('active');
         container.classList.remove('has-panel');
         currentPanelId = null;
@@ -445,4 +468,4 @@ function generateHtml(input) {
     </body>
     </html>
   `;
-}
+}             
