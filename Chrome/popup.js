@@ -141,6 +141,18 @@ document.getElementById('clearBtn').addEventListener('click', async () => {
   }
 });
 
+// When the popup loads, restore the checkbox state
+document.addEventListener('DOMContentLoaded', async () => {
+  const checkbox = document.getElementById('printArtifacts');
+  const storage = await chrome.storage.local.get('printArtifactsEnabled');
+  checkbox.checked = storage.printArtifactsEnabled || false;
+});
+
+// When the checkbox changes, save its state
+document.getElementById('printArtifacts').addEventListener('change', async (e) => {
+  await chrome.storage.local.set({ printArtifactsEnabled: e.target.checked });
+});
+
 function downloadConversation(tabTitle) {
   if (tabTitle === 'Claude') {
     document.getElementById('status').innerHTML = `
@@ -156,7 +168,8 @@ function downloadConversation(tabTitle) {
   
   if (conversation) {
     const jsonString = JSON.stringify(conversation.data);
-    const html = generateHtml(jsonString);
+    const printArtifacts = document.getElementById('printArtifacts').checked;
+    const html = generateHtml(jsonString, printArtifacts);
 
     const blob = new Blob([html], {type: 'text/html'});
     const url = URL.createObjectURL(blob);
