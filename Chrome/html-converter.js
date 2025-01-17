@@ -28,7 +28,6 @@ function escapeHtml(str) {
 
 function replaceInlineCode(text) {
   // Handle triple backticks code blocks
-  console.log(text);
   text = text.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
     return `<pre class="code-block ${lang}">${escapeHtml(code)}</pre>`;
   });
@@ -46,8 +45,6 @@ function replaceInlineCode(text) {
   text = text.replace(/(<li[^>]*>.*?<\/li>\n?)+/gs, (match) => {
     return `<ol class="numbered-list">${match}</ol>`;
   });
-
-  console.log(text);
   return text;
 }
 
