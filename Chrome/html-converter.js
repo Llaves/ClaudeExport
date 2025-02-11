@@ -37,14 +37,157 @@ function replaceInlineCode(text) {
     return `<code class="inline-code">${escapeHtml(code)}</code>`;
   });
 
-  // Handle numbered lists
-  text = text.replace(/^(\d+)\.\s+(.+?)(?=(?:\n\d+\.|$))/gm, (match, number, content) => {
-    return `<li value="${number}">${content.trim()}</li>`;
+  // Process nested numbered lists
+  function processNestedNumberedList(text) {
+    const lines = text.split('\n');
+    const rootList = { items: [], type: 'ol', class: 'numbered-list' };
+    const stack = [rootList];
+    let currentIndentLevel = 0;
+    
+    // Helper function to get indent level
+    function getIndentLevel(line) {
+      const match = line.match(/^(\s*)\d+\./);
+      return match ? Math.floor(match[1].length / 3) : 0;
+    }
+    
+    // Helper function to create HTML
+    function createListHtml(list) {
+      const items = list.items.map(item => {
+        if (typeof item === 'string') {
+          return item;
+        }
+        return `<${item.type} class="${item.class}">${createListHtml(item)}</${item.type}>`;
+      }).join('\n');
+      return items;
+    }
+
+    lines.forEach(line => {
+      // Skip empty lines
+      if (!line.trim()) return;
+      
+      // Check if line is a numbered item
+      const numberMatch = line.match(/^(\s*)(\d+)\.\s+(.+)$/);
+      if (!numberMatch) return;
+      
+      const [, indent, number, content] = numberMatch;
+      const indentLevel = getIndentLevel(line);
+      
+      // Create list item HTML with value attribute
+      const listItem = `<li value="${number}">${content.trim()}</li>`;
+      
+      // Handle indentation changes
+      if (indentLevel > currentIndentLevel) {
+        // Create new nested list
+        const newList = { items: [listItem], type: 'ol', class: 'numbered-list' };
+        // Add the new list to the last item of the parent list
+        const parentList = stack[stack.length - 1];
+        if (typeof parentList.items[parentList.items.length - 1] === 'string') {
+          // Convert the last string item to contain the nested list
+          const lastItem = parentList.items[parentList.items.length - 1];
+          parentList.items[parentList.items.length - 1] = lastItem.replace('</li>', '');
+          parentList.items.push(newList);
+          parentList.items.push('</li>');
+        }
+        stack.push(newList);
+      } else if (indentLevel < currentIndentLevel) {
+        // Pop lists from stack until we reach the correct level
+        while (currentIndentLevel > indentLevel && stack.length > 1) {
+          stack.pop();
+          currentIndentLevel--;
+        }
+        stack[stack.length - 1].items.push(listItem);
+      } else {
+        // Same level, just add the item
+        stack[stack.length - 1].items.push(listItem);
+      }
+      
+      currentIndentLevel = indentLevel;
+    });
+    
+    return `<ol class="numbered-list">${createListHtml(rootList)}</ol>`;
+  }
+
+  // Find all numbered list sections and process them
+  // Updated regex to better identify numbered lists
+  text = text.replace(/(?:^|\n)(?:\s*\d+\.\s+.+(?:\n|$))+/gm, match => {
+    return `\n${processNestedNumberedList(match.trim())}\n`;
   });
 
-  text = text.replace(/(<li[^>]*>.*?<\/li>\n?)+/gs, (match) => {
-    return `<ol class="numbered-list">${match}</ol>`;
+  // Process nested bullet lists
+  function processNestedList(text) {
+    const lines = text.split('\n');
+    const rootList = { items: [], type: 'ul', class: 'bulleted-list' };
+    const stack = [rootList];
+    let currentIndentLevel = 0;
+    
+    // Helper function to get indent level
+    function getIndentLevel(line) {
+      const match = line.match(/^(\s*)([-*])/);
+      return match ? Math.floor(match[1].length / 2) : 0;
+    }
+    
+    // Helper function to create HTML
+    function createListHtml(list) {
+      const items = list.items.map(item => {
+        if (typeof item === 'string') {
+          return item;
+        }
+        return `<${item.type} class="${item.class}">${createListHtml(item)}</${item.type}>`;
+      }).join('\n');
+      return items;
+    }
+
+    lines.forEach(line => {
+      // Skip empty lines
+      if (!line.trim()) return;
+      
+      // Check if line is a bullet point
+      const bulletMatch = line.match(/^(\s*)([-*])\s+(.+)$/);
+      if (!bulletMatch) return;
+      
+      const [, indent, bullet, content] = bulletMatch;
+      const indentLevel = getIndentLevel(line);
+      
+      // Create list item HTML
+      const listItem = `<li>${content.trim()}</li>`;
+      
+      // Handle indentation changes
+      if (indentLevel > currentIndentLevel) {
+        // Create new nested list
+        const newList = { items: [listItem], type: 'ul', class: 'bulleted-list' };
+        // Add the new list to the last item of the parent list
+        const parentList = stack[stack.length - 1];
+        if (typeof parentList.items[parentList.items.length - 1] === 'string') {
+          // Convert the last string item to contain the nested list
+          const lastItem = parentList.items[parentList.items.length - 1];
+          parentList.items[parentList.items.length - 1] = lastItem.replace('</li>', '');
+          parentList.items.push(newList);
+          parentList.items.push('</li>');
+        }
+        stack.push(newList);
+      } else if (indentLevel < currentIndentLevel) {
+        // Pop lists from stack until we reach the correct level
+        while (currentIndentLevel > indentLevel && stack.length > 1) {
+          stack.pop();
+          currentIndentLevel--;
+        }
+        stack[stack.length - 1].items.push(listItem);
+      } else {
+        // Same level, just add the item
+        stack[stack.length - 1].items.push(listItem);
+      }
+      
+      currentIndentLevel = indentLevel;
+    });
+    
+    return `<ul class="bulleted-list">${createListHtml(rootList)}</ul>`;
+  }
+
+  // Find all bullet list sections and process them
+  text = text.replace(/(?:^|\n)(?:[-*]\s+.+\n?)+/gs, match => {
+    return `\n${processNestedList(match.trim())}\n`;
   });
+
   return text;
 }
 
@@ -251,13 +394,7 @@ function generateHtml(input, printArtifacts = false) {
       .message-content {
         color: #1f2937;
       }
-      .numbered-list {
-        margin: 16px 0;
-        padding-left: 40px;
-      }
-      .numbered-list li {
-        margin-bottom: 8px;
-      }
+
       .artifact-button-wrapper {
         margin: 1em 0;
       }
@@ -362,7 +499,34 @@ function generateHtml(input, printArtifacts = false) {
       .artifact-inline.print-enabled {
         display: none;
       }
-      
+        
+  .numbered-list {
+    margin: 16px 0;
+    padding-left: 40px;
+  }
+
+  .numbered-list li {
+    margin-bottom: 8px;
+  }
+
+  .bulleted-list {
+    margin: 16px 0;
+    padding-left: 40px;
+    list-style-type: disc;
+  }
+
+  .bulleted-list .bulleted-list {
+    margin: 8px 0 8px 0;
+    list-style-type: circle;
+  }
+
+  .bulleted-list .bulleted-list .bulleted-list {
+    list-style-type: square;
+  }
+
+  .bulleted-list li {
+    margin-bottom: 8px;
+  }  
       @media print {
         body {
           background-color: white;
