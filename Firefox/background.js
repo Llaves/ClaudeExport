@@ -1,6 +1,3 @@
-// Import shared HTML conversion script
-importScripts('html-converter.js');
-
 // Track conversations by tab title
 let conversationsByTabTitle = {};
 
