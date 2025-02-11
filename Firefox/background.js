@@ -20,22 +20,35 @@ browser.webRequest.onCompleted.addListener(
         // Fetch the conversation
         try {
           const response = await fetch(details.url);
-          const jsonData = await response.json();
-          console.log('Conversation data fetched successfully');
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          const textData = await response.text();
 
-          // Store conversation for this tab title
-          conversationsByTabTitle[tabTitle] = {
-            url: details.url,
-            timestamp: new Date().toISOString(),
-            data: jsonData
-          };
+          let jsonData;
+          try {
+            jsonData = JSON.parse(textData);
+            console.log('Conversation data fetched successfully');
 
-          // Store in browser storage
-          await browser.storage.local.set({ 
-            conversationsByTabTitle: conversationsByTabTitle 
-          });
-          console.log('Conversations stored in local storage');
-        } catch (error) {
+            // Only proceed with storage if JSON parsing succeeded
+            conversationsByTabTitle[tabTitle] = {
+              url: details.url,
+              timestamp: new Date().toISOString(),
+              data: jsonData
+            };
+
+            // Store in browser storage
+            await browser.storage.local.set({ 
+              conversationsByTabTitle: conversationsByTabTitle 
+            });
+            console.log('Conversations stored in local storage');
+          } 
+          catch (jsonError) {
+            console.warn('Invalid JSON response, ignoring:', jsonError);
+            return; // Exit early if JSON parsing fails
+          } 
+        }
+        catch (error) {
           console.error('Fetch or storage error:', error);
         }
       }

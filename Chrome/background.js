@@ -23,29 +23,35 @@ chrome.webRequest.onCompleted.addListener(
           // Fetch the conversation
           try {
             const response = await fetch(details.url);
-            const jsonData = await response.json();
-            console.log('Conversation data fetched successfully');
+            const textData = await response.text();
 
-            // Store conversation for this tab title
-            conversationsByTabTitle[tabTitle] = {
-              url: details.url,
-              timestamp: new Date().toISOString(),
-              data: jsonData
-            };
+            try {
+              const jsonData = JSON.parse(textData);
+              console.log('Conversation data fetched successfully');
 
-            // Store in chrome storage
-            chrome.storage.local.set(
-              { conversationsByTabTitle: conversationsByTabTitle }, 
-              () => {
-                if (chrome.runtime.lastError) {
-                  console.error('Error storing conversations:', chrome.runtime.lastError);
-                } else {
-                  console.log('Conversations stored in local storage');
+              // Store conversation for this tab title
+              conversationsByTabTitle[tabTitle] = {
+                url: details.url,
+                timestamp: new Date().toISOString(),
+                data: jsonData
+              };
+
+              // Store in chrome storage
+              chrome.storage.local.set(
+                { conversationsByTabTitle: conversationsByTabTitle }, 
+                () => {
+                  if (chrome.runtime.lastError) {
+                    console.error('Error storing conversations:', chrome.runtime.lastError);
+                  } else {
+                    console.log('Conversations stored in local storage');
+                  }
                 }
-              }
-            );
+              );
+            } catch (jsonError) {
+              console.warn('Invalid JSON response, ignoring:', jsonError);
+            }
           } catch (error) {
-            console.error('Fetch or storage error:', error);
+            console.error('Fetch error:', error);
           }
         }
       });
