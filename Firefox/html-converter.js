@@ -192,8 +192,9 @@ function replaceInlineCode(text) {
 }
 
 let artifactCounter = 0;
+// Modify the function that replaces artifact tags
 function replaceArtifactTags(input, artifactPanels, printArtifacts = false) {
-  const regex = /<antArtifact[^>]*>([\s\S]*?)<\/antArtifact>/g;
+  const regex = /<antArtifact[^>]*>([\s\S]*?)(<\/antArtifact>|$)/g;
   let matches = [...input.matchAll(regex)];
 
   function extractAttributes(tag) {
@@ -222,21 +223,24 @@ function replaceArtifactTags(input, artifactPanels, printArtifacts = false) {
     `);
   }
 
-  // Process all matches at once to maintain correct ordering
   let result = input;
-
+  
   matches.forEach((match) => {
     const fullMatch = match[0];
-    const content = match[1];
+    let content = match[1];
+    const hasClosingTag = match[2] === "</antArtifact>";
     const openingTag = match[0].substring(0, match[0].indexOf('>') + 1);
     const attributes = extractAttributes(openingTag);
     const lang = attributes.language || typeLookup[attributes.type] || "";
     const artifactId = `artifact-${artifactCounter}`;
     const title = attributes.title || "Untitled";
-    
+
+    if (!hasClosingTag) {
+      content += "\n\n\n THIS ARTIFACT IS INCOMPLETE BECAUSE THE MAX MESSAGE LENGTH WAS EXCEEDED.";
+    }
+
     createArtifactPanel(artifactId, title, content, lang);
     
-    // Create both button and inline content, control visibility with CSS
     result = result.replace(fullMatch, `
       <div class="artifact-wrapper">
         <p class="artifact-button-wrapper ${printArtifacts ? 'print-enabled' : ''}">
@@ -258,6 +262,7 @@ function replaceArtifactTags(input, artifactPanels, printArtifacts = false) {
 
   return result;
 }
+
 
 function generateHtml(input, printArtifacts = false) {
   const parsed = parser(input);
@@ -497,9 +502,21 @@ function generateHtml(input, printArtifacts = false) {
       }
       
       .artifact-inline.print-enabled {
-        display: none;
+        display: none; /* Still hidden in normal view */
       }
-        
+
+      @media print {
+        .artifact-button-wrapper {
+          display: none; /* Hide all artifact buttons when printing */
+        }
+        .artifact-inline.print-enabled {
+          display: block; /* Only show artifacts that are print-enabled */
+        }
+        .artifact-inline:not(.print-enabled) {
+          display: none; /* Explicitly hide non-print-enabled artifacts */
+        }
+      }
+          
   .numbered-list {
     margin: 16px 0;
     padding-left: 40px;

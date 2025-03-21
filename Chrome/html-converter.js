@@ -501,9 +501,21 @@ function generateHtml(input, printArtifacts = false) {
         color: #111827;
       }
       
-      .artifact-inline.print-enabled {
-        display: none;
+    .artifact-inline.print-enabled {
+      display: none; /* Still hidden in normal view */
+    }
+
+    @media print {
+      .artifact-button-wrapper {
+        display: none; /* Hide all artifact buttons when printing */
       }
+      .artifact-inline.print-enabled {
+        display: block; /* Only show artifacts that are print-enabled */
+      }
+      .artifact-inline:not(.print-enabled) {
+        display: none; /* Explicitly hide non-print-enabled artifacts */
+      }
+}
         
   .numbered-list {
     margin: 16px 0;
