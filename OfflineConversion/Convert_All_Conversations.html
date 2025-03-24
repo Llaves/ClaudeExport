@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Claude Archive Converter</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+    <script src="html-converter.js"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            text-align: center;
+            padding: 20px;
+        }
+
+        #drop-area {
+            border: 2px dashed #ccc;
+            padding: 50px;
+            margin: 20px auto;
+            width: 80%;
+            max-width: 600px;
+        }
+
+        #drop-area.highlight {
+            border-color: green;
+            background-color: #eee;
+        }
+
+        #output {
+            margin-top: 20px;
+            text-align: left;
+        }
+
+        #download-link {
+            display: none;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Claude Archive Converter</h1>
+    <div id="drop-area">
+        <p>Drag and drop your Claude archive JSON file here</p>
+    </div>
+    <div id="output"></div>
+    <a id="download-link" download="claude_conversations.zip">Download ZIP</a>
+
+    <script>
+        const dropArea = document.getElementById('drop-area');
+        const outputDiv = document.getElementById('output');
+        const downloadLink = document.getElementById('download-link');
+
+        // Explicit dragover handler
+        function dragOverHandler(ev) {
+            console.log("File(s) in drop zone");
+
+            // Prevent default behavior (Prevent file from being opened)
+            ev.preventDefault();
+        }
+
+        // Explicit drop handler
+        function dropHandler(ev) {
+            console.log("File(s) dropped");
+
+            // Prevent default behavior (Prevent file from being opened)
+            ev.preventDefault();
+
+            if (ev.dataTransfer.items) {
+                // Use DataTransferItemList interface to access the file(s)
+                for (let i = 0; i < ev.dataTransfer.items.length; i++) {
+                    // If dropped items aren't files, reject them
+                    if (ev.dataTransfer.items[i].kind === 'file') {
+                        const file = ev.dataTransfer.items[i].getAsFile();
+                        console.log('File name: ', file.name);
+                        handleFile(file); // Process the file
+                    }
+                }
+            } else {
+                // Use DataTransfer interface to access the file(s)
+                for (let i = 0; i < ev.dataTransfer.files.length; i++) {
+                    console.log('File name: ', ev.dataTransfer.files[i].name);
+                    handleFile(ev.dataTransfer.files[i]);  // Process the file
+                }
+            }
+        }
+
+        dropArea.addEventListener('dragover', dragOverHandler);
+        dropArea.addEventListener('drop', dropHandler);
+
+        // Highlight drop area when item is dragged over it
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropArea.addEventListener(eventName, highlight, false)
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, unhighlight, false)
+        });
+
+        function highlight(e) {
+            dropArea.classList.add('highlight')
+        }
+
+        function unhighlight(e) {
+            dropArea.classList.remove('highlight')
+        }
+
+        function handleFile(file) {
+            const reader = new FileReader()
+
+            reader.onload = function (e) {
+                try {
+                    const jsonData = JSON.parse(e.target.result);
+                    processClaudeArchive(jsonData);
+                } catch (error) {
+                    outputDiv.textContent = 'Error parsing JSON: ' + error;
+                }
+            }
+
+            reader.readAsText(file)
+        }
+
+        async function processClaudeArchive(data) {
+            if (!Array.isArray(data)) {
+                outputDiv.textContent = 'Error:  JSON data must be an array of conversations.';
+                return;
+            }
+
+            const zip = new JSZip();
+            let indexContent = '<h1>Claude Conversations</h1><ul>';
+            let deletedCount = 0;
+            let skippedNoNameCount = 0; // Counter for conversations without names
+
+            for (let i = 0; i < data.length; i++) {
+                const conversation = data[i];
+
+                // Check for a valid conversation name - if it does not exist we skip it.
+                if (!conversation || !conversation.name || typeof conversation.name !== 'string' || conversation.name.trim() === '') {
+                    skippedNoNameCount++;
+                    deletedCount++; //still increment deleted count so that we get the right overall number of skipped conversations.
+                    continue; // Skip conversations without names
+                }
+
+                if (
+                    !conversation ||
+                    typeof conversation !== 'object' ||
+                    !conversation.chat_messages ||
+                    !Array.isArray(conversation.chat_messages) ||
+                    conversation.chat_messages.length === 0 ||
+                    (conversation.name && typeof conversation.name === 'string' && conversation.name.trim() === '')
+                ) {
+                    deletedCount++;
+                    continue; // Skip "deleted" conversations
+                }
+
+                let conversationName = conversation.name;
+                if (typeof conversationName !== 'string') {
+                    conversationName = `Conversation ${i + 1}`;
+                }
+
+                let filename = conversationName.replace(/[^a-zA-Z0-9._\- ]/g, '').trim();
+                if (!filename) {
+                    filename = `conversation_${i + 1}`;
+                }
+                filename += '.html';
+
+                const htmlContent = generateHtml(JSON.stringify(conversation));
+
+                zip.file(filename, htmlContent);
+                indexContent += `<li><a href="${filename}">${conversationName}</a></li>`;
+            }
+
+            indexContent += '</ul>';
+            zip.file('index.html', indexContent);
+
+            const blob = await zip.generateAsync({ type: "blob" });
+            const url = URL.createObjectURL(blob);
+            downloadLink.href = url;
+            downloadLink.style.display = 'block';
+            outputDiv.textContent = `Successfully processed ${data.length - deletedCount} conversations. Skipped ${deletedCount} deleted conversations.  Skipped ${skippedNoNameCount} without names.`;
+        }
+
+    </script>
+</body>
+</html>
