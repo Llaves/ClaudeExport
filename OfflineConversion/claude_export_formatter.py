@@ -613,29 +613,127 @@ def generate_html(json_data, print_artifacts=False):
 
     return html_output
 
-if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python script.py <input_file.json>")
-        sys.exit(1)
 
-    input_file_path = sys.argv[1]
-    base_name = os.path.splitext(input_file_path)[0]
-    output_file_path = base_name + ".html"
+def process_claude_export(input_file, output_dir):
+    """
+    Reads a Claude chat archive JSON file, splits it into multiple HTML files,
+    one for each conversation with content in the input file,
+    and creates a table of contents page with links to each HTML file.
+    """
+
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
     try:
-        with open(input_file_path, 'r', encoding='utf-8') as file:
-            json_data = file.read()
-
-        html_output = generate_html(json_data, print_artifacts=False)
-
-        with open(output_file_path, "w", encoding="utf-8") as output_file:
-            output_file.write(html_output)
-
-        print(f"HTML output saved to {output_file_path}")
-
+        with open(input_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
     except FileNotFoundError:
-        print(f"Error: Input file not found: {input_file_path}")
-        sys.exit(1)
+        print(f"Error: Input file '{input_file}' not found.")
+        return
+    except json.JSONDecodeError as e:
+        print(f"Error: Invalid JSON in '{input_file}': {e}")
+        return
+
+    if not isinstance(data, list):
+        print("Error: The JSON data should be a list of conversations.")
+        return
+
+    toc_entries = []
+    deleted_count = 0
+
+    for conversation in data:
+        if not isinstance(conversation, dict):
+            print("Warning: Found a non-dictionary element in the conversation list. Skipping.")
+            continue
+
+        # Check for content. Conversations without chat_messages are considered deleted
+        if ("chat_messages" not in conversation or
+            not isinstance(conversation["chat_messages"], list) or
+            not conversation["chat_messages"]) or \
+           ("name" in conversation and
+            isinstance(conversation["name"], str) and
+            conversation["name"] == ""):
+
+            deleted_count += 1
+            continue  # Skip to the next conversation
+
+
+        if "name" not in conversation or not isinstance(conversation["name"], str):
+            print("Warning: Conversation missing 'name' or 'name' is not a string. Using a generic filename.")
+            base_filename = f"conversation_{data.index(conversation) + 1}"
+            conversation_name = base_filename
+        else:
+            conversation_name = conversation["name"]
+            # Sanitize the conversation name to create a valid filename
+            base_filename = "".join(c for c in conversation_name if c.isalnum() or c in "._- ")
+            base_filename = base_filename.strip()  # Remove leading/trailing whitespace
+            if not base_filename:  # if filename is empty after sanitization
+                base_filename = f"conversation_{data.index(conversation) + 1}"  # Use generic name
+
+        filename = f"{base_filename}.html"
+        output_path = os.path.join(output_dir, filename)
+
+        try:
+            html_output = generate_html(json.dumps(conversation))
+            with open(output_path, "w", encoding="utf-8") as outfile:
+                outfile.write(html_output)
+
+            toc_entries.append((conversation_name, filename))
+            print(f"Successfully wrote conversation to '{output_path}'")
+
+        except Exception as e:
+            print(f"Error writing to '{output_path}': {e}")
+
+    # Generate table of contents
+    toc_html = generate_toc(toc_entries)
+    toc_path = os.path.join(output_dir, "index.html")
+    try:
+        with open(toc_path, "w", encoding="utf-8") as toc_file:
+            toc_file.write(toc_html)
+        print(f"Successfully wrote table of contents to '{toc_path}'")
     except Exception as e:
-        print(f"An error occurred: {e}")
-        sys.exit(1)
+        print(f"Error writing table of contents: {e}")
+
+    print(f"\nFound and skipped {deleted_count} deleted (empty) conversations.")  # Print total count
+
+
+def generate_toc(toc_entries):
+    """Generates the HTML for the table of contents."""
+    html = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Table of Contents</title>
+        <style>
+            body { font-family: sans-serif; }
+            ul { list-style-type: none; padding: 0; }
+            li { margin-bottom: 0.5em; }
+            a { text-decoration: none; color: blue; }
+            a:hover { text-decoration: underline; }
+        </style>
+    </head>
+    <body>
+        <h1>Table of Contents</h1>
+        <ul>
+    """
+
+    for title, filename in toc_entries:
+        html += f'<li><a href="{filename}">{escape_html(title)}</a></li>\n'
+
+    html += """
+        </ul>
+    </body>
+    </html>
+    """
+    return html
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        print("Usage: python script.py <input_file.json> <output_directory>")
+    else:
+        input_file = sys.argv[1]
+        output_dir = sys.argv[2]
+        process_claude_export(input_file, output_dir)
