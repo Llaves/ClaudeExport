@@ -7,6 +7,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
     <script src="html-converter.js"></script>
     <style>
+        /* Styles for the drag/drop upload page */
         body {
             font-family: sans-serif;
             text-align: center;
@@ -53,33 +54,26 @@
         // Explicit dragover handler
         function dragOverHandler(ev) {
             console.log("File(s) in drop zone");
-
-            // Prevent default behavior (Prevent file from being opened)
             ev.preventDefault();
         }
 
         // Explicit drop handler
         function dropHandler(ev) {
             console.log("File(s) dropped");
-
-            // Prevent default behavior (Prevent file from being opened)
             ev.preventDefault();
 
             if (ev.dataTransfer.items) {
-                // Use DataTransferItemList interface to access the file(s)
                 for (let i = 0; i < ev.dataTransfer.items.length; i++) {
-                    // If dropped items aren't files, reject them
                     if (ev.dataTransfer.items[i].kind === 'file') {
                         const file = ev.dataTransfer.items[i].getAsFile();
                         console.log('File name: ', file.name);
-                        handleFile(file); // Process the file
+                        handleFile(file);
                     }
                 }
             } else {
-                // Use DataTransfer interface to access the file(s)
                 for (let i = 0; i < ev.dataTransfer.files.length; i++) {
                     console.log('File name: ', ev.dataTransfer.files[i].name);
-                    handleFile(ev.dataTransfer.files[i]);  // Process the file
+                    handleFile(ev.dataTransfer.files[i]);
                 }
             }
         }
@@ -88,11 +82,16 @@
         dropArea.addEventListener('drop', dropHandler);
 
         // Highlight drop area when item is dragged over it
-        ['dragenter', 'dragover'].forEach(eventName => {
+        ['dragenter'].forEach(eventName => {
             dropArea.addEventListener(eventName, highlight, false)
         });
-
-        ['dragleave', 'drop'].forEach(eventName => {
+        ['dragleave'].forEach(eventName => {
+            dropArea.addEventListener(eventName, unhighlight, false)
+        });
+        ['dragover'].forEach(eventName => {
+            dropArea.addEventListener(eventName, highlight, false)
+        });
+        ['drop'].forEach(eventName => {
             dropArea.addEventListener(eventName, unhighlight, false)
         });
 
@@ -126,18 +125,43 @@
             }
 
             const zip = new JSZip();
-            let indexContent = '<h1>Claude Conversations</h1><ul>';
+
+            //  STORE indexContent here.  It will now include the STYLE element.
+            let indexContent = `<!DOCTYPE html><html><head><title>Claude Conversations</title><style>
+            body { font-family: sans-serif;
+                     width: 1000px;
+                     margin: auto;}
+            ul { list-style-type: none; padding: 0; }
+            li { margin-bottom: 0.5em; }
+            a { text-decoration: none; color: blue; }
+            a:hover { text-decoration: underline; }
+            .toc-entry {
+                display: flex;
+                align-items: baseline; /* Align items on the baseline */
+                gap: 0.5em; /* Add some space between timestamp and title */
+                color: black; /* Sets the color of the text */
+                font-size: 1em; /* Sets a font-size for the list */
+            }
+            .timestamp {
+                color: black;  /* Sets the color of the timestamp */
+                font-size: 1em;  /* Sets font size to match list */
+                white-space: nowrap; /* Prevent line breaks */
+            }
+        </style></head><body><h1>Claude Conversations</h1><ul>`;
+
+
             let deletedCount = 0;
-            let skippedNoNameCount = 0; // Counter for conversations without names
+            let skippedNoNameCount = 0;
+
+            const conversationEntries = [];
 
             for (let i = 0; i < data.length; i++) {
                 const conversation = data[i];
 
-                // Check for a valid conversation name - if it does not exist we skip it.
                 if (!conversation || !conversation.name || typeof conversation.name !== 'string' || conversation.name.trim() === '') {
                     skippedNoNameCount++;
-                    deletedCount++; //still increment deleted count so that we get the right overall number of skipped conversations.
-                    continue; // Skip conversations without names
+                    deletedCount++;
+                    continue;
                 }
 
                 if (
@@ -145,11 +169,19 @@
                     typeof conversation !== 'object' ||
                     !conversation.chat_messages ||
                     !Array.isArray(conversation.chat_messages) ||
-                    conversation.chat_messages.length === 0 ||
-                    (conversation.name && typeof conversation.name === 'string' && conversation.name.trim() === '')
+                    conversation.chat_messages.length === 0
                 ) {
                     deletedCount++;
-                    continue; // Skip "deleted" conversations
+                    continue;
+                }
+
+                let lastMessageDate = null;
+
+                if (conversation.chat_messages && conversation.chat_messages.length > 0) {
+                    const lastMessage = conversation.chat_messages[conversation.chat_messages.length - 1];
+                    if (lastMessage && lastMessage.created_at) {
+                        lastMessageDate = new Date(lastMessage.created_at);
+                    }
                 }
 
                 let conversationName = conversation.name;
@@ -166,10 +198,32 @@
                 const htmlContent = generateHtml(JSON.stringify(conversation));
 
                 zip.file(filename, htmlContent);
-                indexContent += `<li><a href="${filename}">${conversationName}</a></li>`;
+
+                let timestampString = "N/A";
+                if (lastMessageDate) {
+                    const year = lastMessageDate.getFullYear();
+                    const month = String(lastMessageDate.getMonth() + 1).padStart(2, '0');
+                    const day = String(lastMessageDate.getDate()).padStart(2, '0');
+                    const hours = String(lastMessageDate.getHours()).padStart(2, '0');
+                    const minutes = String(lastMessageDate.getMinutes()).padStart(2, '0');
+                    timestampString = `[${year}-${month}-${day} ${hours}:${minutes}]`;
+                }
+
+                conversationEntries.push({
+                    filename: filename,
+                    name: conversationName,
+                    timestamp: lastMessageDate ? lastMessageDate.getTime() : 0,
+                    timestampString: timestampString
+                });
             }
 
-            indexContent += '</ul>';
+            conversationEntries.sort((a, b) => a.timestamp - b.timestamp);
+
+            conversationEntries.forEach(entry => {
+                indexContent += `<li><span class="toc-entry"><span class="timestamp">${entry.timestampString}</span><a href="${entry.filename}">${entry.name}</a></span></li>`;
+            });
+
+            indexContent += '</ul></body></html>';  //Close the HTML tags
             zip.file('index.html', indexContent);
 
             const blob = await zip.generateAsync({ type: "blob" });

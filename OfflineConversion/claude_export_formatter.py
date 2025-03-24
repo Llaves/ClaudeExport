@@ -638,7 +638,7 @@ def process_claude_export(input_file, output_dir):
         print("Error: The JSON data should be a list of conversations.")
         return
 
-    toc_entries = []
+    conversations = [] # stores each converation as a tuple
     deleted_count = 0
 
     for conversation in data:
@@ -672,20 +672,51 @@ def process_claude_export(input_file, output_dir):
 
         filename = f"{base_filename}.html"
         output_path = os.path.join(output_dir, filename)
+        try:
+            # Add a timestamp to conversation list
+            if "chat_messages" in conversation and conversation["chat_messages"]:
+                # Access the timestamp of the first message and add to the list
+                first_message_time = conversation["chat_messages"][0].get("created_at")
+
+                # Handle different timestamp formats and possible missing time
+                if first_message_time:
+                    try:
+                        # First timestamp attempt
+                        datetime_object = datetime.datetime.fromisoformat(first_message_time.replace('Z', '+00:00'))
+                    except:
+                        print("Could not decode time object")
+                        datetime_object = None # default to none for timestamp to allow the system to still run
+                else:
+                    datetime_object = None
+            else:
+                print ("Warning: no messages found")
+                datetime_object = None
+        except Exception as time_error:
+            print("Error getting a time value", time_error)
+            datetime_object = None # default to none for timestamp to allow the system to still run
+
 
         try:
             html_output = generate_html(json.dumps(conversation))
             with open(output_path, "w", encoding="utf-8") as outfile:
                 outfile.write(html_output)
-
-            toc_entries.append((conversation_name, filename))
-            print(f"Successfully wrote conversation to '{output_path}'")
+            conversations.append((datetime_object, conversation_name, filename))
 
         except Exception as e:
             print(f"Error writing to '{output_path}': {e}")
 
+    #Sort the convos
+    conversations.sort(key=lambda x: (x[0] is None, x[0])) # sorts null dates to the end
+
+    toc_entries = []
+    creation_timestamps = []
+    for datetime_object, conversation_name, filename in conversations:
+        toc_entries.append((conversation_name, filename))
+        creation_timestamps.append(datetime_object)
+
+
     # Generate table of contents
-    toc_html = generate_toc(toc_entries)
+    toc_html = generate_toc(toc_entries, creation_timestamps)
     toc_path = os.path.join(output_dir, "index.html")
     try:
         with open(toc_path, "w", encoding="utf-8") as toc_file:
@@ -697,9 +728,10 @@ def process_claude_export(input_file, output_dir):
     print(f"\nFound and skipped {deleted_count} deleted (empty) conversations.")  # Print total count
 
 
-def generate_toc(toc_entries):
+def generate_toc(toc_entries, creation_timestamps):
     """Generates the HTML for the table of contents."""
-    html = """
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S") # time and date the index file was generated
+    html = f"""
     <!DOCTYPE html>
     <html>
     <head>
@@ -707,21 +739,40 @@ def generate_toc(toc_entries):
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Table of Contents</title>
         <style>
-            body { font-family: sans-serif; }
-            ul { list-style-type: none; padding: 0; }
-            li { margin-bottom: 0.5em; }
-            a { text-decoration: none; color: blue; }
-            a:hover { text-decoration: underline; }
+            body {{ font-family: sans-serif;
+                     width: 1000px;
+                     margin: auto;}}
+            ul {{ list-style-type: none; padding: 0; }}
+            li {{ margin-bottom: 0.5em; }}
+            a {{ text-decoration: none; color: blue; }}
+            a:hover {{ text-decoration: underline; }}
+            .toc-entry {{
+                display: flex;
+                align-items: baseline; /* Align items on the baseline */
+                gap: 0.5em; /* Add some space between timestamp and title */
+                color: black; /* Sets the color of the text */
+                font-size: 1em; /* Sets a font-size for the list */
+            }}
+            .timestamp {{
+                color: black;  /* Sets the color of the timestamp */
+                font-size: 1em;  /* Sets font size to match list */
+                white-space: nowrap; /* Prevent line breaks */
+            }}
         </style>
     </head>
     <body>
         <h1>Table of Contents</h1>
+        <p>Generated on: {now}</p>
         <ul>
     """
 
-    for title, filename in toc_entries:
-        html += f'<li><a href="{filename}">{escape_html(title)}</a></li>\n'
-
+    for i, (title, filename) in enumerate(toc_entries):
+        timestamp = ""
+        if creation_timestamps[i]:
+            timestamp = creation_timestamps[i].strftime("%Y-%m-%d %H:%M") #DATE HOUR MIN FORMAT
+            html += f'<li><span class="toc-entry"><span class="timestamp">[{timestamp}]</span><a href="{filename}">{escape_html(title)}</a></span></li>\n'
+        else:
+            html += f'<li><span class="toc-entry"><span class="timestamp">[Timestamp Unavailable]</span><a href="{filename}">{escape_html(title)}</a></span></li>\n'
     html += """
         </ul>
     </body>
