@@ -73,7 +73,7 @@
             } else {
                 for (let i = 0; i < ev.dataTransfer.files.length; i++) {
                     console.log('File name: ', ev.dataTransfer.files[i].name);
-                    handleFile(ev.dataTransfer.files[i]);
+                    handleFile(file);
                 }
             }
         }
@@ -132,20 +132,26 @@
                      width: 1000px;
                      margin: auto;}
             ul { list-style-type: none; padding: 0; }
-            li { margin-bottom: 0.5em; }
+            li { margin-bottom: 1em; } /* Increased for better spacing */
             a { text-decoration: none; color: blue; }
             a:hover { text-decoration: underline; }
             .toc-entry {
                 display: flex;
-                align-items: baseline; /* Align items on the baseline */
-                gap: 0.5em; /* Add some space between timestamp and title */
-                color: black; /* Sets the color of the text */
-                font-size: 1em; /* Sets a font-size for the list */
+                flex-direction: column; /* Stack timestamp, link, and description */
+                align-items: flex-start; /* Left align all items */
+                gap: 0.2em; /* Reduced gap */
+                color: black;
+                font-size: 1em;
             }
             .timestamp {
-                color: black;  /* Sets the color of the timestamp */
-                font-size: 1em;  /* Sets font size to match list */
-                white-space: nowrap; /* Prevent line breaks */
+                color: black;
+                font-size: 1em;
+                white-space: nowrap;
+            }
+            .description {
+                font-size: 0.8em;
+                color: black;
+                margin-left: 0; /* Ensure left alignment */
             }
         </style></head><body><h1>Claude Conversations</h1><ul>`;
 
@@ -209,18 +215,33 @@
                     timestampString = `[${year}-${month}-${day} ${hours}:${minutes}]`;
                 }
 
+                // Extract the first prompt as the description from the *sorted* messages
+                let description = "";
+                if (conversation.chat_messages && conversation.chat_messages.length > 0) {
+                    // Sort the messages *before* getting the description
+                    const sortedMessages = [...conversation.chat_messages].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+                    description = sortedMessages[0].content[0].text || "No description available."; // Use first message as description
+                    // Trim the description to a reasonable length.
+                    description = description.substring(0, 200) + (description.length > 200 ? "..." : "");
+
+                }
                 conversationEntries.push({
                     filename: filename,
                     name: conversationName,
                     timestamp: lastMessageDate ? lastMessageDate.getTime() : 0,
-                    timestampString: timestampString
+                    timestampString: timestampString,
+                    description: description  // Add the description to the entry
                 });
             }
 
             conversationEntries.sort((a, b) => a.timestamp - b.timestamp);
 
             conversationEntries.forEach(entry => {
-                indexContent += `<li><span class="toc-entry"><span class="timestamp">${entry.timestampString}</span><a href="${entry.filename}">${entry.name}</a></span></li>`;
+                indexContent += `<li><span class="toc-entry">
+                                    <span class="timestamp">${entry.timestampString}</span>
+                                    <a href="${entry.filename}">${entry.name}</a>
+                                    <span class="description">${entry.description}</span>
+                                </span></li>`;
             });
 
             indexContent += '</ul></body></html>';  //Close the HTML tags

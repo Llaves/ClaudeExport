@@ -7,8 +7,8 @@ import sys
 import os
 
 type_lookup = {
-  "application/vnd.ant.react": "jsx",
-  "text/html": "html"
+    "application/vnd.ant.react": "jsx",
+    "text/html": "html"
 }
 
 def escape_html(text):
@@ -237,6 +237,12 @@ def generate_html(json_data, print_artifacts=False):
     except json.JSONDecodeError:
         return ""
 
+    # Sort chat_messages by timestamp
+    try:
+        parsed["chat_messages"].sort(key=lambda x: datetime.datetime.fromisoformat(x["created_at"].replace('Z', '+00:00')))
+    except (KeyError, ValueError) as e:
+        print(f"Warning: Could not sort chat messages due to timestamp issues: {e}")
+
     artifact_panels = []
 
     messages = ""
@@ -279,7 +285,8 @@ def generate_html(json_data, print_artifacts=False):
             else:
                 message_content += escape_html(json.dumps(content))
 
-        timestamp =  datetime.datetime.fromisoformat(message["created_at"].replace('Z', '+00:00')).strftime("%b %d, %Y %I:%M %p")
+        timestamp = datetime.datetime.fromisoformat(message["created_at"].replace('Z', '+00:00')).strftime(
+            "%b %d, %Y %I:%M %p")
 
         message_class = message["sender"].lower()
 
@@ -370,7 +377,7 @@ def generate_html(json_data, print_artifacts=False):
             gap: 8px;
             padding: 8px 16px;
             background-color: #f3f4f6;
-            border: 1px solid #e5e7eb;
+            border: 1px solid #0f0f0f;
             border-radius: 6px;
             cursor: pointer;
             font-size: 14px;
@@ -638,7 +645,7 @@ def process_claude_export(input_file, output_dir):
         print("Error: The JSON data should be a list of conversations.")
         return
 
-    conversations = [] # stores each converation as a tuple
+    conversations = []  # stores each conversation as a tuple
     deleted_count = 0
 
     for conversation in data:
@@ -648,18 +655,18 @@ def process_claude_export(input_file, output_dir):
 
         # Check for content. Conversations without chat_messages are considered deleted
         if ("chat_messages" not in conversation or
-            not isinstance(conversation["chat_messages"], list) or
-            not conversation["chat_messages"]) or \
-           ("name" in conversation and
-            isinstance(conversation["name"], str) and
-            conversation["name"] == ""):
+                not isinstance(conversation["chat_messages"], list) or
+                not conversation["chat_messages"]) or \
+                ("name" in conversation and
+                 isinstance(conversation["name"], str) and
+                 conversation["name"] == ""):
 
             deleted_count += 1
             continue  # Skip to the next conversation
 
-
         if "name" not in conversation or not isinstance(conversation["name"], str):
-            print("Warning: Conversation missing 'name' or 'name' is not a string. Using a generic filename.")
+            print(
+                "Warning: Conversation missing 'name' or 'name' is not a string. Using a generic filename.")
             base_filename = f"conversation_{data.index(conversation) + 1}"
             conversation_name = base_filename
         else:
@@ -672,6 +679,30 @@ def process_claude_export(input_file, output_dir):
 
         filename = f"{base_filename}.html"
         output_path = os.path.join(output_dir, filename)
+
+        # Get initial prompt AFTER sorting
+        description = ""
+        try:
+            # Load json to sort
+            json_string = json.dumps(conversation)  # dump and reload to keep from editing source material
+            sorted_conversation = json.loads(json_string)
+
+            # Sort it
+            sorted_conversation["chat_messages"].sort(
+                key=lambda x: datetime.datetime.fromisoformat(x["created_at"].replace('Z', '+00:00')))
+            if "chat_messages" in sorted_conversation and sorted_conversation["chat_messages"]:
+                # Access the timestamp of the first message and add to the list
+                first_message = sorted_conversation["chat_messages"][0]
+                if first_message["sender"].lower() == "human" and first_message["content"]:
+                    description = first_message["content"][0].get("text", "")  # extract first message
+                else:
+                    description = "No initial human message found."
+            else:
+                description = "No chat messages in conversation."
+        except Exception as prompt_error:
+            print("Could not read prompt", prompt_error)  # Don't interrupt code for message failure
+            description = "Error extracting description."
+
         try:
             # Add a timestamp to conversation list
             if "chat_messages" in conversation and conversation["chat_messages"]:
@@ -682,41 +713,45 @@ def process_claude_export(input_file, output_dir):
                 if first_message_time:
                     try:
                         # First timestamp attempt
-                        datetime_object = datetime.datetime.fromisoformat(first_message_time.replace('Z', '+00:00'))
+                        datetime_object = datetime.datetime.fromisoformat(
+                            first_message_time.replace('Z', '+00:00'))
                     except:
                         print("Could not decode time object")
-                        datetime_object = None # default to none for timestamp to allow the system to still run
+                        datetime_object = None  # default to none for timestamp to allow the system to still run
                 else:
                     datetime_object = None
             else:
-                print ("Warning: no messages found")
+                print("Warning: no messages found")
                 datetime_object = None
         except Exception as time_error:
             print("Error getting a time value", time_error)
-            datetime_object = None # default to none for timestamp to allow the system to still run
-
+            datetime_object = None  # default to none for timestamp to allow the system to still run
 
         try:
+            # Sort messages *within* the conversation
+
             html_output = generate_html(json.dumps(conversation))
             with open(output_path, "w", encoding="utf-8") as outfile:
                 outfile.write(html_output)
-            conversations.append((datetime_object, conversation_name, filename))
+            conversations.append((datetime_object, conversation_name, filename, description))  # add description
 
         except Exception as e:
             print(f"Error writing to '{output_path}': {e}")
 
-    #Sort the convos
-    conversations.sort(key=lambda x: (x[0] is None, x[0])) # sorts null dates to the end
+    # Sort the convos
+    conversations.sort(key=lambda x: (x[0] is None, x[0]))  # sorts null dates to the end
 
     toc_entries = []
     creation_timestamps = []
-    for datetime_object, conversation_name, filename in conversations:
+    descriptions = []  # Add descriptions
+
+    for datetime_object, conversation_name, filename, description in conversations:
         toc_entries.append((conversation_name, filename))
         creation_timestamps.append(datetime_object)
-
+        descriptions.append(description)
 
     # Generate table of contents
-    toc_html = generate_toc(toc_entries, creation_timestamps)
+    toc_html = generate_toc(toc_entries, creation_timestamps, descriptions)
     toc_path = os.path.join(output_dir, "index.html")
     try:
         with open(toc_path, "w", encoding="utf-8") as toc_file:
@@ -725,54 +760,47 @@ def process_claude_export(input_file, output_dir):
     except Exception as e:
         print(f"Error writing table of contents: {e}")
 
+    print(f"\nCreated {toc_entries.__len__()} entries in TOC.")
     print(f"\nFound and skipped {deleted_count} deleted (empty) conversations.")  # Print total count
 
 
-def generate_toc(toc_entries, creation_timestamps):
+def generate_toc(toc_entries, creation_timestamps, descriptions):
     """Generates the HTML for the table of contents."""
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S") # time and date the index file was generated
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # time and date the index file was generated
     html = f"""
     <!DOCTYPE html>
     <html>
     <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Table of Contents</title>
+        <title>Claude Conversations</title>
         <style>
             body {{ font-family: sans-serif;
                      width: 1000px;
                      margin: auto;}}
             ul {{ list-style-type: none; padding: 0; }}
-            li {{ margin-bottom: 0.5em; }}
+            li {{ margin-bottom: 1em; }}  /* Increased for better spacing */
             a {{ text-decoration: none; color: blue; }}
             a:hover {{ text-decoration: underline; }}
-            .toc-entry {{
-                display: flex;
-                align-items: baseline; /* Align items on the baseline */
-                gap: 0.5em; /* Add some space between timestamp and title */
-                color: black; /* Sets the color of the text */
-                font-size: 1em; /* Sets a font-size for the list */
-            }}
-            .timestamp {{
-                color: black;  /* Sets the color of the timestamp */
-                font-size: 1em;  /* Sets font size to match list */
-                white-space: nowrap; /* Prevent line breaks */
+            .timestamp {{ color: black; font-size: 1em; white-space: nowrap;}}
+            .description {{
+                font-size: 0.8em;
+                color: black;
+                margin-left: 3em; /* Aligned with the start of the link */
             }}
         </style>
     </head>
     <body>
-        <h1>Table of Contents</h1>
-        <p>Generated on: {now}</p>
+        <h1>Claude Conversations</h1>
         <ul>
     """
 
     for i, (title, filename) in enumerate(toc_entries):
         timestamp = ""
         if creation_timestamps[i]:
-            timestamp = creation_timestamps[i].strftime("%Y-%m-%d %H:%M") #DATE HOUR MIN FORMAT
-            html += f'<li><span class="toc-entry"><span class="timestamp">[{timestamp}]</span><a href="{filename}">{escape_html(title)}</a></span></li>\n'
+            timestamp = creation_timestamps[i].strftime("%Y-%m-%d %H:%M")  # DATE HOUR MIN FORMAT
+            html += f"""
+            <li><span class="timestamp">[{timestamp}]</span> <a href="{filename}">{escape_html(title)}</a><br><span class="description">{escape_html(descriptions[i])}</span></li>\n"""
         else:
-            html += f'<li><span class="toc-entry"><span class="timestamp">[Timestamp Unavailable]</span><a href="{filename}">{escape_html(title)}</a></span></li>\n'
+            html += f'<li><span class="timestamp">[Timestamp Unavailable]</span> <a href="{filename}">{escape_html(title)}</a><br><span class="description">Description Unavailable</span></li>\n'
     html += """
         </ul>
     </body>

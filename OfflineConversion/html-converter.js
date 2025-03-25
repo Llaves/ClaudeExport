@@ -43,13 +43,13 @@ function replaceInlineCode(text) {
     const rootList = { items: [], type: 'ol', class: 'numbered-list' };
     const stack = [rootList];
     let currentIndentLevel = 0;
-    
+
     // Helper function to get indent level
     function getIndentLevel(line) {
       const match = line.match(/^(\s*)\d+\./);
       return match ? Math.floor(match[1].length / 3) : 0;
     }
-    
+
     // Helper function to create HTML
     function createListHtml(list) {
       const items = list.items.map(item => {
@@ -64,17 +64,17 @@ function replaceInlineCode(text) {
     lines.forEach(line => {
       // Skip empty lines
       if (!line.trim()) return;
-      
+
       // Check if line is a numbered item
       const numberMatch = line.match(/^(\s*)(\d+)\.\s+(.+)$/);
       if (!numberMatch) return;
-      
+
       const [, indent, number, content] = numberMatch;
       const indentLevel = getIndentLevel(line);
-      
+
       // Create list item HTML with value attribute
       const listItem = `<li value="${number}">${content.trim()}</li>`;
-      
+
       // Handle indentation changes
       if (indentLevel > currentIndentLevel) {
         // Create new nested list
@@ -100,10 +100,10 @@ function replaceInlineCode(text) {
         // Same level, just add the item
         stack[stack.length - 1].items.push(listItem);
       }
-      
+
       currentIndentLevel = indentLevel;
     });
-    
+
     return `<ol class="numbered-list">${createListHtml(rootList)}</ol>`;
   }
 
@@ -119,13 +119,13 @@ function replaceInlineCode(text) {
     const rootList = { items: [], type: 'ul', class: 'bulleted-list' };
     const stack = [rootList];
     let currentIndentLevel = 0;
-    
+
     // Helper function to get indent level
     function getIndentLevel(line) {
       const match = line.match(/^(\s*)([-*])/);
       return match ? Math.floor(match[1].length / 2) : 0;
     }
-    
+
     // Helper function to create HTML
     function createListHtml(list) {
       const items = list.items.map(item => {
@@ -140,17 +140,17 @@ function replaceInlineCode(text) {
     lines.forEach(line => {
       // Skip empty lines
       if (!line.trim()) return;
-      
+
       // Check if line is a bullet point
       const bulletMatch = line.match(/^(\s*)([-*])\s+(.+)$/);
       if (!bulletMatch) return;
-      
+
       const [, indent, bullet, content] = bulletMatch;
       const indentLevel = getIndentLevel(line);
-      
+
       // Create list item HTML
       const listItem = `<li>${content.trim()}</li>`;
-      
+
       // Handle indentation changes
       if (indentLevel > currentIndentLevel) {
         // Create new nested list
@@ -176,10 +176,10 @@ function replaceInlineCode(text) {
         // Same level, just add the item
         stack[stack.length - 1].items.push(listItem);
       }
-      
+
       currentIndentLevel = indentLevel;
     });
-    
+
     return `<ul class="bulleted-list">${createListHtml(rootList)}</ul>`;
   }
 
@@ -224,7 +224,7 @@ function replaceArtifactTags(input, artifactPanels, printArtifacts = false) {
   }
 
   let result = input;
-  
+
   matches.forEach((match) => {
     const fullMatch = match[0];
     let content = match[1];
@@ -240,7 +240,7 @@ function replaceArtifactTags(input, artifactPanels, printArtifacts = false) {
     }
 
     createArtifactPanel(artifactId, title, content, lang);
-    
+
     result = result.replace(fullMatch, `
       <div class="artifact-wrapper">
         <p class="artifact-button-wrapper ${printArtifacts ? 'print-enabled' : ''}">
@@ -271,6 +271,13 @@ function generateHtml(input, printArtifacts = false) {
   }
 
   const artifactPanels = [];
+
+  // Sort chat_messages by created_at timestamp
+  parsed.chat_messages.sort((a, b) => {
+    const dateA = new Date(a.created_at);
+    const dateB = new Date(b.created_at);
+    return dateA.getTime() - dateB.getTime();
+  });
 
   const messages = parsed.chat_messages.map(message => {
     const messageContent = message.content.map(content => {
@@ -582,7 +589,7 @@ function generateHtml(input, printArtifacts = false) {
       function hideAllPanels() {
         artifactPanels.forEach(panel => {
           panel.classList.remove('active');
-      }); 
+      });
         artifactContainer.classList.remove('active');
         container.classList.remove('has-panel');
         currentPanelId = null;
@@ -593,7 +600,7 @@ function generateHtml(input, printArtifacts = false) {
         artifactPanels.forEach(panel => {
           panel.classList.remove('active');
         });
-        
+
         // Show the selected panel
         const panel = document.getElementById(panelId);
         if (panel) {
@@ -607,7 +614,7 @@ function generateHtml(input, printArtifacts = false) {
       artifactButtons.forEach(button => {
         button.addEventListener('click', () => {
           const artifactId = button.dataset.artifactId;
-          
+
           // If clicking the same button that's currently shown, hide it
           if (artifactId === currentPanelId) {
             hideAllPanels();
