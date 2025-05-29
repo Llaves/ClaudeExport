@@ -26,169 +26,147 @@ function escapeHtml(str) {
   });
 }
 
-function replaceInlineCode(text) {
-  // Handle triple backticks code blocks
-  text = text.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
-    return `<pre class="code-block ${lang}">${escapeHtml(code)}</pre>`;
-  });
-
-  // Handle inline code with single backticks
-  text = text.replace(/`([^`]+)`/g, (match, code) => {
+// Helper function to process inline code (single backticks)
+function processInlineCodeInText(text) {
+  return text.replace(/`([^`]+)`/g, (match, code) => {
     return `<code class="inline-code">${escapeHtml(code)}</code>`;
   });
+}
 
-  // Process nested numbered lists
-  function processNestedNumberedList(text) {
-    const lines = text.split('\n');
-    const rootList = { items: [], type: 'ol', class: 'numbered-list' };
-    const stack = [rootList];
-    let currentIndentLevel = 0;
-    
-    // Helper function to get indent level
-    function getIndentLevel(line) {
-      const match = line.match(/^(\s*)\d+\./);
-      return match ? Math.floor(match[1].length / 3) : 0;
-    }
-    
-    // Helper function to create HTML
-    function createListHtml(list) {
-      const items = list.items.map(item => {
-        if (typeof item === 'string') {
-          return item;
-        }
-        return `<${item.type} class="${item.class}">${createListHtml(item)}</${item.type}>`;
-      }).join('\n');
-      return items;
-    }
-
-    lines.forEach(line => {
-      // Skip empty lines
-      if (!line.trim()) return;
-      
-      // Check if line is a numbered item
-      const numberMatch = line.match(/^(\s*)(\d+)\.\s+(.+)$/);
-      if (!numberMatch) return;
-      
-      const [, indent, number, content] = numberMatch;
-      const indentLevel = getIndentLevel(line);
-      
-      // Create list item HTML with value attribute
-      const listItem = `<li value="${number}">${content.trim()}</li>`;
-      
-      // Handle indentation changes
-      if (indentLevel > currentIndentLevel) {
-        // Create new nested list
-        const newList = { items: [listItem], type: 'ol', class: 'numbered-list' };
-        // Add the new list to the last item of the parent list
-        const parentList = stack[stack.length - 1];
-        if (typeof parentList.items[parentList.items.length - 1] === 'string') {
-          // Convert the last string item to contain the nested list
-          const lastItem = parentList.items[parentList.items.length - 1];
-          parentList.items[parentList.items.length - 1] = lastItem.replace('</li>', '');
-          parentList.items.push(newList);
-          parentList.items.push('</li>');
-        }
-        stack.push(newList);
-      } else if (indentLevel < currentIndentLevel) {
-        // Pop lists from stack until we reach the correct level
-        while (currentIndentLevel > indentLevel && stack.length > 1) {
-          stack.pop();
-          currentIndentLevel--;
-        }
-        stack[stack.length - 1].items.push(listItem);
-      } else {
-        // Same level, just add the item
-        stack[stack.length - 1].items.push(listItem);
+// Function to process nested bullet lists (now only receives actual list blocks)
+function processNestedList(text) {
+  const lines = text.split('\n');
+  const rootList = { items: [], type: 'ul', class: 'bulleted-list' };
+  const stack = [rootList];
+  let currentIndentLevel = 0;
+  
+  function getIndentLevel(line) {
+    const match = line.match(/^(\s*)([-*])/);
+    return match ? Math.floor(match[1].length / 2) : 0;
+  }
+  
+  function createListHtml(list) {
+    let innerHtml = '';
+    list.items.forEach(item => {
+      if (typeof item === 'string') {
+        innerHtml += item; // This is already the <li> tag
+      } else { // It's a nested list object
+        innerHtml += `<li>${createListHtml(item)}</li>`; // Create li for nested list
       }
-      
-      currentIndentLevel = indentLevel;
     });
-    
-    return `<ol class="numbered-list">${createListHtml(rootList)}</ol>`;
+    return `<${list.type} class="${list.class}">${innerHtml}</${list.type}>`;
   }
 
-  // Find all numbered list sections and process them
-  // Updated regex to better identify numbered lists
-  text = text.replace(/(?:^|\n)(?:\s*\d+\.\s+.+(?:\n|$))+/gm, match => {
-    return `\n${processNestedNumberedList(match.trim())}\n`;
-  });
+  lines.forEach(line => {
+    if (!line.trim()) return; 
 
-  // Process nested bullet lists
-  function processNestedList(text) {
-    const lines = text.split('\n');
-    const rootList = { items: [], type: 'ul', class: 'bulleted-list' };
-    const stack = [rootList];
-    let currentIndentLevel = 0;
-    
-    // Helper function to get indent level
-    function getIndentLevel(line) {
-      const match = line.match(/^(\s*)([-*])/);
-      return match ? Math.floor(match[1].length / 2) : 0;
+    const bulletMatch = line.match(/^(\s*)([-*])\s*(.+)$/);
+    if (!bulletMatch) {
+      return; 
     }
     
-    // Helper function to create HTML
-    function createListHtml(list) {
-      const items = list.items.map(item => {
-        if (typeof item === 'string') {
-          return item;
-        }
-        return `<${item.type} class="${item.class}">${createListHtml(item)}</${item.type}>`;
-      }).join('\n');
-      return items;
-    }
+    const [, indent, bullet, content] = bulletMatch;
+    const indentLevel = getIndentLevel(line);
+    
+    const listItemHtml = `<li>${processInlineCodeInText(content)}</li>`; // Apply inline code here
 
-    lines.forEach(line => {
-      // Skip empty lines
-      if (!line.trim()) return;
-      
-      // Check if line is a bullet point
-      const bulletMatch = line.match(/^(\s*)([-*])\s+(.+)$/);
-      if (!bulletMatch) return;
-      
-      const [, indent, bullet, content] = bulletMatch;
-      const indentLevel = getIndentLevel(line);
-      
-      // Create list item HTML
-      const listItem = `<li>${content.trim()}</li>`;
-      
-      // Handle indentation changes
-      if (indentLevel > currentIndentLevel) {
-        // Create new nested list
-        const newList = { items: [listItem], type: 'ul', class: 'bulleted-list' };
-        // Add the new list to the last item of the parent list
-        const parentList = stack[stack.length - 1];
-        if (typeof parentList.items[parentList.items.length - 1] === 'string') {
-          // Convert the last string item to contain the nested list
-          const lastItem = parentList.items[parentList.items.length - 1];
-          parentList.items[parentList.items.length - 1] = lastItem.replace('</li>', '');
-          parentList.items.push(newList);
-          parentList.items.push('</li>');
+    // Adjust nesting level
+    if (indentLevel > currentIndentLevel) {
+      const newList = { items: [listItemHtml], type: 'ul', class: 'bulleted-list', parent: stack[stack.length - 1] };
+      const lastItem = stack[stack.length - 1].items[stack[stack.length - 1].items.length - 1];
+      if (typeof lastItem === 'string') {
+        if (stack[stack.length - 1].items.length > 0) {
+            stack[stack.length - 1].items[stack[stack.length - 1].items.length - 1] = 
+              stack[stack.length - 1].items[stack[stack.length - 1].items.length - 1].replace('</li>', `${createListHtml(newList)}</li>`);
+        } else {
+            stack[stack.length - 1].items.push(newList); 
         }
-        stack.push(newList);
-      } else if (indentLevel < currentIndentLevel) {
-        // Pop lists from stack until we reach the correct level
-        while (currentIndentLevel > indentLevel && stack.length > 1) {
-          stack.pop();
-          currentIndentLevel--;
-        }
-        stack[stack.length - 1].items.push(listItem);
       } else {
-        // Same level, just add the item
-        stack[stack.length - 1].items.push(listItem);
+          stack[stack.length - 1].items.push(newList);
       }
-      
-      currentIndentLevel = indentLevel;
+      stack.push(newList);
+    } else if (indentLevel < currentIndentLevel) {
+      while (currentIndentLevel > indentLevel && stack.length > 1) {
+        const closedList = stack.pop();
+        currentIndentLevel--;
+      }
+      stack[stack.length - 1].items.push(listItemHtml);
+    } else {
+      stack[stack.length - 1].items.push(listItemHtml);
+    }
+    currentIndentLevel = indentLevel;
+  });
+  
+  // Recursively build HTML from the root list object
+  return createListHtml(rootList);
+}
+
+
+// Function to process nested numbered lists (now only receives actual list blocks)
+function processNestedNumberedList(text) {
+  const lines = text.split('\n');
+  const rootList = { items: [], type: 'ol', class: 'numbered-list' };
+  const stack = [rootList];
+  let currentIndentLevel = 0;
+  
+  function getIndentLevel(line) {
+    const match = line.match(/^(\s*)\d+\./);
+    return match ? Math.floor(match[1].length / 3) : 0;
+  }
+  
+  function createListHtml(list) {
+    let innerHtml = '';
+    list.items.forEach(item => {
+      if (typeof item === 'string') {
+        innerHtml += item; 
+      } else { // It's a nested list object
+        innerHtml += `<li>${createListHtml(item)}</li>`; 
+      }
     });
-    
-    return `<ul class="bulleted-list">${createListHtml(rootList)}</ul>`;
+    return `<${list.type} class="${list.class}">${innerHtml}</${list.type}>`;
   }
 
-  // Find all bullet list sections and process them
-  text = text.replace(/(?:^|\n)(?:[-*]\s+.+\n?)+/gs, match => {
-    return `\n${processNestedList(match.trim())}\n`;
+  lines.forEach(line => {
+    if (!line.trim()) return; 
+    
+    const numberMatch = line.match(/^(\s*)(\d+)\.\s*(.+)$/);
+    if (!numberMatch) {
+      return;
+    }
+    
+    const [, indent, number, content] = numberMatch;
+    const indentLevel = getIndentLevel(line);
+    
+    const listItemHtml = `<li value="${number}">${processInlineCodeInText(content)}</li>`; 
+    
+    // Adjust nesting level
+    if (indentLevel > currentIndentLevel) {
+      const newList = { items: [listItemHtml], type: 'ol', class: 'numbered-list', parent: stack[stack.length - 1] };
+      const lastItem = stack[stack.length - 1].items[stack[stack.length - 1].items.length - 1];
+      if (typeof lastItem === 'string') {
+        if (stack[stack.length - 1].items.length > 0) {
+          stack[stack.length - 1].items[stack[stack.length - 1].items.length - 1] = 
+            stack[stack.length - 1].items[stack[stack.length - 1].items.length - 1].replace('</li>', `${createListHtml(newList)}</li>`);
+        } else {
+            stack[stack.length - 1].items.push(newList);
+        }
+      } else {
+          stack[stack.length - 1].items.push(newList);
+      }
+      stack.push(newList);
+    } else if (indentLevel < currentIndentLevel) {
+      while (currentIndentLevel > indentLevel && stack.length > 1) {
+        const closedList = stack.pop();
+        currentIndentLevel--;
+      }
+      stack[stack.length - 1].items.push(listItemHtml);
+    } else {
+      stack[stack.length - 1].items.push(listItemHtml);
+    }
+    currentIndentLevel = indentLevel;
   });
-
-  return text;
+  
+  return createListHtml(rootList);
 }
 
 let artifactCounter = 0;
@@ -264,6 +242,89 @@ function replaceArtifactTags(input, artifactPanels, printArtifacts = false) {
 }
 
 
+// REVISED: New `replaceInlineCode` to handle mixed content (paragraphs and lists)
+function replaceInlineCode(text) {
+  // First, handle code blocks (triple backticks) - this should be done before any line-by-line parsing
+  text = text.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
+    return `<pre class="code-block ${lang}">${escapeHtml(code)}</pre>`;
+  });
+
+  const lines = text.split('\n');
+  let htmlParts = [];
+  let currentParagraphLines = [];
+  let currentListLines = [];
+  let inListBlock = false;
+
+  function processCurrentParagraph() {
+    if (currentParagraphLines.length > 0) {
+      const paragraphContent = currentParagraphLines.join('\n').trim();
+      if (paragraphContent) {
+        htmlParts.push(`<p>${processInlineCodeInText(paragraphContent)}</p>`);
+      }
+      currentParagraphLines = [];
+    }
+  }
+
+  function processCurrentListBlock() {
+    if (currentListLines.length > 0) {
+      const listBlockText = currentListLines.join('\n');
+      if (listBlockText.trim()) { // Ensure there's actual content
+        if (listBlockText.match(/^\s*\d+\./m)) { // Check for numbered list
+          htmlParts.push(processNestedNumberedList(listBlockText));
+        } else if (listBlockText.match(/^\s*[-*]/m)) { // Check for bulleted list
+          htmlParts.push(processNestedList(listBlockText));
+        } else {
+          // Fallback: if it was thought to be a list but isn't, treat as paragraph
+          htmlParts.push(`<p>${processInlineCodeInText(listBlockText.trim())}</p>`);
+        }
+      }
+      currentListLines = [];
+    }
+  }
+
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    const isListItem = trimmedLine.match(/^(\s*)([-*]|\d+\.)\s/);
+
+    // If it's a code block (already processed and marked with <pre>), just add it
+    if (line.includes('<pre class="code-block')) {
+        processCurrentParagraph();
+        processCurrentListBlock();
+        htmlParts.push(line); // Add the already-converted code block HTML
+        continue;
+    }
+
+    if (isListItem) {
+      // If we were in a paragraph, close it
+      processCurrentParagraph();
+      // Mark that we are in a list block and add the line
+      inListBlock = true;
+      currentListLines.push(line);
+    } else {
+      // Not a list item
+      if (inListBlock) {
+        // If we were in a list block, close it
+        processCurrentListBlock();
+        inListBlock = false; // Reset list block state
+      }
+
+      // Handle empty lines for paragraph separation
+      if (trimmedLine === '' && currentParagraphLines.length > 0) {
+        processCurrentParagraph(); // Close current paragraph, implying a new one after the empty line
+      } else if (trimmedLine !== '') {
+        currentParagraphLines.push(line);
+      }
+    }
+  }
+
+  // Process any remaining paragraph or list block at the end of the text
+  processCurrentParagraph();
+  processCurrentListBlock();
+
+  return htmlParts.join('\n');
+}
+
+
 function generateHtml(input, printArtifacts = false) {
   const parsed = parser(input);
   if (!parsed.chat_messages) {
@@ -306,8 +367,9 @@ function generateHtml(input, printArtifacts = false) {
           `;
         }
       } else if (content.text) {
+        // Corrected: Call replaceArtifactTags first, then replaceInlineCode
         let processedText = replaceArtifactTags(content.text, artifactPanels, printArtifacts);
-        processedText = replaceInlineCode(processedText);
+        processedText = replaceInlineCode(processedText); 
         return processedText;
       }
       return escapeHtml(JSON.stringify(content));
@@ -501,22 +563,22 @@ function generateHtml(input, printArtifacts = false) {
         color: #111827;
       }
       
-      .artifact-inline.print-enabled {
-        display: none; /* Still hidden in normal view */
-      }
+    .artifact-inline.print-enabled {
+      display: none; /* Still hidden in normal view */
+    }
 
-      @media print {
-        .artifact-button-wrapper {
-          display: none; /* Hide all artifact buttons when printing */
-        }
-        .artifact-inline.print-enabled {
-          display: block; /* Only show artifacts that are print-enabled */
-        }
-        .artifact-inline:not(.print-enabled) {
-          display: none; /* Explicitly hide non-print-enabled artifacts */
-        }
+    @media print {
+      .artifact-button-wrapper {
+        display: none; /* Hide all artifact buttons when printing */
       }
-          
+      .artifact-inline.print-enabled {
+        display: block; /* Only show artifacts that are print-enabled */
+      }
+      .artifact-inline:not(.print-enabled) {
+        display: none; /* Explicitly hide non-print-enabled artifacts */
+      }
+}
+        
   .numbered-list {
     margin: 16px 0;
     padding-left: 40px;
@@ -649,4 +711,4 @@ function generateHtml(input, printArtifacts = false) {
     </body>
     </html>
   `;
-}             
+}

@@ -7,18 +7,16 @@ document.getElementById('viewBtn').addEventListener('click', async () => {
     
     const statusEl = document.getElementById('status');
    
-    // Filter out 'Claude' tab, if exists
-    const filteredConversations = Object.fromEntries(
-      Object.entries(conversationsByTabTitle).filter(([tabTitle]) => tabTitle !== 'Claude')
-    );
+    // No longer filtering by 'Claude' tab title, as conversations are stored by their actual names
+    const availableConversations = conversationsByTabTitle;
    
-    if (Object.keys(filteredConversations).length > 0) {
+    if (Object.keys(availableConversations).length > 0) {
       // If multiple conversations, show a list
       let html = '<strong>Captured Conversations:</strong><br>';
-      Object.entries(filteredConversations).forEach(([tabTitle, conversation]) => {
+      Object.entries(availableConversations).forEach(([conversationName, conversation]) => {
         html += `
-          <div class="conversation-item" data-tab-title="${escapeHtml(tabTitle)}" style="cursor: pointer; padding: 5px; margin: 5px 0; border: 1px solid #ccc;">
-            <strong>Tab: ${escapeHtml(tabTitle)}</strong><br>
+          <div class="conversation-item" data-tab-title="${escapeHtml(conversationName)}" style="cursor: pointer; padding: 5px; margin: 5px 0; border: 1px solid #ccc;">
+            <strong>Conversation: ${escapeHtml(conversationName)}</strong><br>
             URL: ${conversation.url}<br>
             Timestamp: ${conversation.timestamp}<br>
           </div>
@@ -51,8 +49,11 @@ document.getElementById('downloadBtn').addEventListener('click', async () => {
     const storage = await chrome.storage.local.get('conversationsByTabTitle');
     conversationsByTabTitle = storage.conversationsByTabTitle || {};
     
+    // No longer filtering by 'Claude' tab title
+    const availableConversations = conversationsByTabTitle;
+
     // If no conversations, show message
-    if (Object.keys(conversationsByTabTitle).length === 0) {
+    if (Object.keys(availableConversations).length === 0) {
       document.getElementById('status').innerHTML = `
         <div style="color: blue;">
           <strong>No conversation to download</strong><br>
@@ -68,34 +69,18 @@ document.getElementById('downloadBtn').addEventListener('click', async () => {
       return;
     }
 
-    // Filter out 'Claude' tab, if exists
-    const filteredConversations = Object.fromEntries(
-      Object.entries(conversationsByTabTitle).filter(([tabTitle]) => tabTitle !== 'Claude')
-    );
-
-    // If no conversations left after filtering, show message
-    if (Object.keys(filteredConversations).length === 0) {
-      document.getElementById('status').innerHTML = `
-        <div style="color: blue;">
-          <strong>No downloadable conversations</strong><br>
-          All captured conversations are from the "Claude" tab.
-        </div>
-      `;
-      return;
-    }
-
     // If multiple conversations, create a selection dialog
-    if (Object.keys(filteredConversations).length > 1) {
+    if (Object.keys(availableConversations).length > 1) {
       const statusEl = document.getElementById('status');
       let html = '<strong>Select a Conversation to Download:</strong><br>';
       
-      Object.entries(filteredConversations).forEach(([tabTitle, conversation]) => {
+      Object.entries(availableConversations).forEach(([conversationName, conversation]) => {
         html += `
-          <div class="download-option" data-tab-title="${escapeHtml(tabTitle)}" style="cursor: pointer; padding: 5px; margin: 5px 0; border: 1px solid #ccc;">
-            <strong>Tab: ${escapeHtml(tabTitle)}</strong><br>
+          <div class="download-option" data-tab-title="${escapeHtml(conversationName)}" style="cursor: pointer; padding: 5px; margin: 5px 0; border: 1px solid #ccc;">
+            <strong>Conversation: ${escapeHtml(conversationName)}</strong><br>
             URL: ${conversation.url}<br>
             Timestamp: ${conversation.timestamp}<br>
-            <button class="select-download" data-tab-title="${escapeHtml(tabTitle)}">Download This Conversation</button>
+            <button class="select-download" data-tab-title="${escapeHtml(conversationName)}">Download This Conversation</button>
           </div>
         `;
       });
@@ -105,18 +90,18 @@ document.getElementById('downloadBtn').addEventListener('click', async () => {
       // Add click events to download buttons
       document.querySelectorAll('.select-download').forEach(button => {
         button.addEventListener('click', function() {
-          const tabTitle = this.getAttribute('data-tab-title');
-          downloadConversation(tabTitle);
+          const conversationName = this.getAttribute('data-tab-title');
+          downloadConversation(conversationName);
         });
       });
       
       return;
     }
 
-    // If only one conversation left after filtering, download it
-    if (Object.keys(filteredConversations).length === 1) {
-      const firstTabTitle = Object.keys(filteredConversations)[0];
-      downloadConversation(firstTabTitle);
+    // If only one conversation, download it directly
+    if (Object.keys(availableConversations).length === 1) {
+      const firstConversationName = Object.keys(availableConversations)[0];
+      downloadConversation(firstConversationName);
     }
   } catch (error) {
     console.error('Error preparing download:', error);
@@ -153,22 +138,16 @@ document.getElementById('printArtifacts').addEventListener('change', async (e) =
   await chrome.storage.local.set({ printArtifactsEnabled: e.target.checked });
 });
 
-function downloadConversation(tabTitle) {
-  if (tabTitle === 'Claude') {
-    document.getElementById('status').innerHTML = `
-      <div style="color: blue;">
-        <strong>Download Prevented</strong><br>
-        Conversations from the "Claude" tab cannot be downloaded.
-      </div>
-    `;
-    return;
-  }
+function downloadConversation(conversationName) {
+  // The 'Claude' tab title check is removed here as conversations are now stored by their actual names.
+  // If a conversation's name happens to be 'Claude', it can still be downloaded.
   
-  const conversation = conversationsByTabTitle[tabTitle];
+  const conversation = conversationsByTabTitle[conversationName];
   
   if (conversation) {
     const jsonString = JSON.stringify(conversation.data);
     const printArtifacts = document.getElementById('printArtifacts').checked;
+    // The generateHtml function is imported via html-converter.js
     const html = generateHtml(jsonString, printArtifacts);
 
     const blob = new Blob([html], {type: 'text/html'});
@@ -176,7 +155,8 @@ function downloadConversation(tabTitle) {
     
     const a = document.createElement('a');
     a.href = url;
-    a.download = `chat_conversations_${conversation.timestamp.replace(/:/g, '-')}_${encodeURIComponent(tabTitle)}.html`;
+    // Use conversationName in the filename
+    a.download = `chat_conversations_${conversation.timestamp.replace(/:/g, '-')}_${encodeURIComponent(conversationName)}.html`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

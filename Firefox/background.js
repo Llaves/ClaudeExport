@@ -29,6 +29,7 @@ browser.webRequest.onCompleted.addListener(
   async (details) => {
     if (!details.url.includes('chat_conversations/') 
         || details.url.includes('latest')
+        || details.url.includes('count')
         || details.url.includes('/chat_message_warning')) {
       return;
     }
@@ -43,12 +44,7 @@ browser.webRequest.onCompleted.addListener(
     browser.tabs.query({active: true, currentWindow: true}).then(async (tabs) => {
       if (!tabs[0]) return;
       
-      const tabTitle = tabs[0].title || 'Untitled Tab';
-      
-      if (conversationsByTabTitle[tabTitle]?.url === details.url) {
-        console.log('Skipping already processed conversation for tab:', tabTitle);
-        return;
-      }
+
 
       try {
         const response = await fetch(details.url);
@@ -60,21 +56,40 @@ browser.webRequest.onCompleted.addListener(
         try {
           const jsonData = JSON.parse(textData);
           console.log('Conversation data fetched successfully');
+          
 
           if (!isValidConversationData(jsonData)) {
             console.warn('Invalid conversation data structure, skipping');
             return;
           }
+          // Use the conversation's name as the key for storage
+          // Fallback to UUID or a generic name if 'name' is not available
+          const conversationKey = jsonData.name || jsonData.uuid || 'Untitled Conversation';
+          
+          // Skip if we've already processed this exact URL for this conversation key
+          if (conversationsByTabTitle[conversationKey]?.url === details.url) {
+            console.log('Skipping already processed conversation for key:', conversationKey);
+            return;
+          }
 
-          conversationsByTabTitle[tabTitle] = {
+          // Store the conversation data
+          conversationsByTabTitle[conversationKey] = {
             url: details.url,
             timestamp: new Date().toISOString(),
             data: jsonData
           };
 
+          
           browser.storage.local.set(
-            { conversationsByTabTitle: conversationsByTabTitle } 
-          ).catch(error => console.error('Error storing conversations:', error));
+            { conversationsByTabTitle: conversationsByTabTitle }, 
+            () => {
+              if (chrome.runtime.lastError) {
+                console.error('Error storing conversations:', chrome.runtime.lastError);
+              } else {
+                console.log('Conversations stored in local storage');
+              }
+            }
+          );
         } catch (jsonError) {
           console.warn('Invalid JSON response, ignoring:', jsonError);
         }

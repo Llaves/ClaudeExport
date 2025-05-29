@@ -35,6 +35,7 @@ chrome.webRequest.onCompleted.addListener(
     // Skip if not a conversation URL
     if (!details.url.includes('chat_conversations/') 
         || details.url.includes('latest')
+        || details.url.includes('count')
         || details.url.includes('/chat_message_warning')) {
       return;
     }
@@ -51,14 +52,6 @@ chrome.webRequest.onCompleted.addListener(
     chrome.tabs.query({active: true, currentWindow: true}, async (tabs) => {
       if (!tabs[0]) return;
       
-      const tabTitle = tabs[0].title || 'Untitled Tab';
-      
-      // Skip if we've already processed this exact URL for this tab
-      if (conversationsByTabTitle[tabTitle]?.url === details.url) {
-        console.log('Skipping already processed conversation for tab:', tabTitle);
-        return;
-      }
-
       // Fetch the conversation
       try {
         const response = await fetch(details.url);
@@ -77,8 +70,18 @@ chrome.webRequest.onCompleted.addListener(
             return;
           }
 
+          // Use the conversation's name as the key for storage
+          // Fallback to UUID or a generic name if 'name' is not available
+          const conversationKey = jsonData.name || jsonData.uuid || 'Untitled Conversation';
+          
+          // Skip if we've already processed this exact URL for this conversation key
+          if (conversationsByTabTitle[conversationKey]?.url === details.url) {
+            console.log('Skipping already processed conversation for key:', conversationKey);
+            return;
+          }
+
           // Store the conversation data
-          conversationsByTabTitle[tabTitle] = {
+          conversationsByTabTitle[conversationKey] = {
             url: details.url,
             timestamp: new Date().toISOString(),
             data: jsonData
@@ -138,11 +141,23 @@ function isValidConversationData(data) {
 
 // Clear the in-memory cache when tabs are closed
 chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
+  // When a tab is removed, we want to clear any conversation associated with its title.
+  // This is a best-effort approach as tab titles can change.
   chrome.tabs.get(tabId, (tab) => {
-    if (chrome.runtime.lastError) return;
+    if (chrome.runtime.lastError) return; // Tab might already be gone
     const tabTitle = tab.title || 'Untitled Tab';
-    delete conversationsByTabTitle[tabTitle];
-    console.log('Cleared cached conversation for closed tab:', tabTitle);
+    // Iterate through stored conversations and remove those whose names match the closed tab's title
+    // This assumes conversation name is often the tab title, which might not always be true,
+    // but it's a reasonable heuristic for cleanup.
+    for (const key in conversationsByTabTitle) {
+      if (key === tabTitle) { // Check if the stored conversation key matches the closed tab's title
+        delete conversationsByTabTitle[key];
+        console.log('Cleared cached conversation for closed tab (by title match):', tabTitle);
+      }
+    }
+    // Also, if the conversation was stored by its actual name, and that name was the tab title,
+    // it will be cleared. If the tab title was generic "Claude", and the conversation had a specific name,
+    // that specific conversation will remain. This is desired.
   });
 });
 

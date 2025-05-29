@@ -44,10 +44,11 @@ function createNoConversationsMessage(statusEl) {
     statusEl.appendChild(container);
 }
 
-function createConversationItem(tabTitle, conversation) {
-    const container = createStyledDiv('conversation-item', tabTitle);
+// Updated to use conversationName instead of tabTitle for display
+function createConversationItem(conversationName, conversation) {
+    const container = createStyledDiv('conversation-item', conversationName);
     
-    const titleLine = createBasicElement('strong', `Tab: ${tabTitle}`);
+    const titleLine = createBasicElement('strong', `Conversation: ${conversationName}`);
     container.appendChild(titleLine);
     container.appendChild(createBasicElement('br'));
     
@@ -61,10 +62,11 @@ function createConversationItem(tabTitle, conversation) {
     return container;
 }
 
-function createDownloadOption(tabTitle, conversation) {
-    const container = createStyledDiv('download-option', tabTitle);
+// Updated to use conversationName instead of tabTitle for display and data attribute
+function createDownloadOption(conversationName, conversation) {
+    const container = createStyledDiv('download-option', conversationName);
     
-    const titleLine = createBasicElement('strong', `Tab: ${tabTitle}`);
+    const titleLine = createBasicElement('strong', `Conversation: ${conversationName}`);
     container.appendChild(titleLine);
     container.appendChild(createBasicElement('br'));
     
@@ -78,7 +80,7 @@ function createDownloadOption(tabTitle, conversation) {
     
     const button = createBasicElement('button', 'Download This Conversation');
     button.className = 'select-download';
-    button.setAttribute('data-tab-title', tabTitle);
+    button.setAttribute('data-tab-title', conversationName); // Use conversationName here
     container.appendChild(button);
     
     return container;
@@ -98,18 +100,16 @@ document.getElementById('viewBtn').addEventListener('click', async () => {
         const statusEl = document.getElementById('status');
         clearElement(statusEl);
         
-        const filteredConversations = Object.fromEntries(
-            Object.entries(conversationsByTabTitle)
-                .filter(([tabTitle]) => tabTitle !== 'Claude')
-        );
+        // Removed filtering by 'Claude' tab title
+        const availableConversations = conversationsByTabTitle;
         
-        if (Object.keys(filteredConversations).length > 0) {
+        if (Object.keys(availableConversations).length > 0) {
             const header = createBasicElement('strong', 'Captured Conversations:');
             statusEl.appendChild(header);
             statusEl.appendChild(createBasicElement('br'));
             
-            Object.entries(filteredConversations).forEach(([tabTitle, conversation]) => {
-                statusEl.appendChild(createConversationItem(tabTitle, conversation));
+            Object.entries(availableConversations).forEach(([conversationName, conversation]) => {
+                statusEl.appendChild(createConversationItem(conversationName, conversation));
             });
         } else {
             createNoConversationsMessage(statusEl);
@@ -129,47 +129,39 @@ document.getElementById('downloadBtn').addEventListener('click', async () => {
         const statusEl = document.getElementById('status');
         clearElement(statusEl);
         
-        if (Object.keys(conversationsByTabTitle).length === 0) {
+        // Removed filtering by 'Claude' tab title
+        const availableConversations = conversationsByTabTitle;
+
+        if (Object.keys(availableConversations).length === 0) {
             createNoConversationsMessage(statusEl);
             return;
         }
 
-        const filteredConversations = Object.fromEntries(
-            Object.entries(conversationsByTabTitle)
-                .filter(([tabTitle]) => tabTitle !== 'Claude')
-        );
+        // Removed specific 'Claude' tab check for download prevention,
+        // as conversations are now stored by their actual names.
+        // If a conversation's name happens to be 'Claude', it can now be downloaded.
 
-        if (Object.keys(filteredConversations).length === 0) {
-            const container = createStyledDiv(null, null);
-            container.style.color = 'blue';
-            container.appendChild(createBasicElement('strong', 'No downloadable conversations'));
-            container.appendChild(createBasicElement('br'));
-            container.appendChild(createBasicElement('span', 'All captured conversations are from the "Claude" tab.'));
-            statusEl.appendChild(container);
-            return;
-        }
-
-        if (Object.keys(filteredConversations).length > 1) {
+        if (Object.keys(availableConversations).length > 1) {
             const header = createBasicElement('strong', 'Select a Conversation to Download:');
             statusEl.appendChild(header);
             statusEl.appendChild(createBasicElement('br'));
             
-            Object.entries(filteredConversations).forEach(([tabTitle, conversation]) => {
-                statusEl.appendChild(createDownloadOption(tabTitle, conversation));
+            Object.entries(availableConversations).forEach(([conversationName, conversation]) => {
+                statusEl.appendChild(createDownloadOption(conversationName, conversation));
             });
             
             document.querySelectorAll('.select-download').forEach(button => {
                 button.addEventListener('click', function() {
-                    const tabTitle = this.getAttribute('data-tab-title');
-                    downloadConversation(tabTitle);
+                    const conversationName = this.getAttribute('data-tab-title');
+                    downloadConversation(conversationName);
                 });
             });
             return;
         }
 
-        if (Object.keys(filteredConversations).length === 1) {
-            const firstTabTitle = Object.keys(filteredConversations)[0];
-            downloadConversation(firstTabTitle);
+        if (Object.keys(availableConversations).length === 1) {
+            const firstConversationName = Object.keys(availableConversations)[0];
+            downloadConversation(firstConversationName);
         }
     } catch (error) {
         console.error('Error preparing download:', error);
@@ -199,25 +191,17 @@ document.getElementById('clearBtn').addEventListener('click', async () => {
     }
 });
 
-function downloadConversation(tabTitle) {
-    if (tabTitle === 'Claude') {
-        const statusEl = document.getElementById('status');
-        clearElement(statusEl);
-        
-        const container = createStyledDiv(null, null);
-        container.style.color = 'blue';
-        container.appendChild(createBasicElement('strong', 'Download Prevented'));
-        container.appendChild(createBasicElement('br'));
-        container.appendChild(createBasicElement('span', 'Conversations from the "Claude" tab cannot be downloaded.'));
-        statusEl.appendChild(container);
-        return;
-    }
+// Updated to use conversationName instead of tabTitle for download
+function downloadConversation(conversationName) {
+    // The 'Claude' tab title check is removed here as conversations are now stored by their actual names.
+    // If a conversation's name happens to be 'Claude', it can still be downloaded.
     
-    const conversation = conversationsByTabTitle[tabTitle];
+    const conversation = conversationsByTabTitle[conversationName];
     
     if (conversation) {
         const jsonString = JSON.stringify(conversation.data);    
         const printArtifacts = document.getElementById('printArtifacts').checked;
+        // Assuming generateHtml is available in the global scope via importScripts
         const html = generateHtml(jsonString, printArtifacts);
 
         const blob = new Blob([html], {type: 'text/html'});
@@ -225,7 +209,7 @@ function downloadConversation(tabTitle) {
         
         const a = document.createElement('a');
         a.href = url;
-        a.download = `chat_conversations_${conversation.timestamp.replace(/:/g, '-')}_${encodeURIComponent(tabTitle)}.html`;
+        a.download = `chat_conversations_${conversation.timestamp.replace(/:/g, '-')}_${encodeURIComponent(conversationName)}.html`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
